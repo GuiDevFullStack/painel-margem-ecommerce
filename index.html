@@ -84,12 +84,18 @@ const renderOriginal=render;render=function(){renderOriginal();document.querySel
 async function loadApi(force=false){
   if(loading)return;
   loading=true;
-  let pageNo=0,rawCount=0,total=0,next='',rawSeen=new Set(),meta=dashboardMeta(),mode='full',start='2000-01-01',end=dashboardToday(),since='';
+  let pageNo=Number(dashboardMeta().pageNo||0),rawCount=0,total=0,next='',rawSeen=new Set(),meta=dashboardMeta(),mode='full',start='2000-01-01',end=dashboardToday(),since='';
   try{
     let cached=await dashboardReadCache();
     if(cached.length){data=cached;fillFilters();render()}
+    let lastSync=Date.parse(meta.lastSyncAt||'');
+    if(!force&&meta.full&&data.length&&Number.isFinite(lastSync)&&Date.now()-lastSync<5*60*1000){
+      $('status').textContent=`${data.length.toLocaleString('pt-BR')} itens no cache — sincronização recente mantida; nenhuma consulta necessária`;
+      loading=false;return;
+    }
     let today=dashboardToday(),currentStart=today.slice(0,7)+'-01';
     let resumable=Boolean(meta.inProgress&&meta.next!==undefined&&meta.start&&meta.end&&(meta.mode==='full'||meta.mode==='incremental'));
+    if(!resumable)pageNo=0;
     if(resumable){
       mode=meta.mode;start=meta.start;end=meta.end;since=meta.since||'';next=String(meta.next||'');
     }else if(meta.full&&data.length){
@@ -100,15 +106,15 @@ async function loadApi(force=false){
         since=Number.isFinite(t)?new Date(Math.max(0,t-1000)).toISOString():`${checkpoint}T00:00:00.000Z`;
       }
     }
-    let title=mode==='full'?'carga histórica':'novos pedidos';
-    $('status').innerHTML=`<span class="loading-dot"></span>${mode==='full'?'Carregando todas as vendas':'Verificando novos pedidos'} no cache...`;
+    let retomando=Boolean(resumable&&mode==='full');
+    $('status').innerHTML=`<span class="loading-dot"></span>${retomando?'Retomando carga histórica':'Carregando todas as vendas'} no cache...`;
     do{
       pageNo++;
       let url=new URL(API_URL);
       url.searchParams.set('start',start);url.searchParams.set('end',end);url.searchParams.set('limit','100');
       if(since)url.searchParams.set('since',since);
       if(next)url.searchParams.set('next',next);
-      $('status').innerHTML=`<span class="loading-dot"></span>${mode==='full'?'Carregando todas as vendas':'Verificando novos pedidos'}: ${rawCount.toLocaleString('pt-BR')}${total?' de '+total.toLocaleString('pt-BR'):''} — página ${pageNo}`;
+      $('status').innerHTML=`<span class="loading-dot"></span>${retomando?'Retomando carga histórica':mode==='full'?'Carregando todas as vendas':'Verificando novos pedidos'}: ${rawCount.toLocaleString('pt-BR')}${total?' de '+total.toLocaleString('pt-BR'):''} — página ${pageNo}`;
       let response=await fetch(url.toString()),body=await response.text();
       if(!response.ok)throw new Error(`HTTP ${response.status}: ${body.slice(0,240)}`);
       let payload=JSON.parse(body),part=payload.result||payload.orders||payload.data||[];
@@ -125,18 +131,18 @@ async function loadApi(force=false){
         break;
       }
       next=cursor;
-      dashboardSaveMeta({full:mode==='full'?false:Boolean(meta.full),inProgress:true,mode,start,end,since,next,total,rawCount});
+      dashboardSaveMeta({full:mode==='full'?false:Boolean(meta.full),inProgress:true,mode,start,end,since,next,total,rawCount,pageNo});
       if(rawCount>200000)throw new Error('Limite de segurança de 200.000 pedidos atingido');
     }while(true);
     let completeFull=mode==='full'||Boolean(meta.full);
-    dashboardSaveMeta({full:completeFull,inProgress:false,mode,start,end,since,lastSyncAt:new Date().toISOString(),total,rawCount});
+    dashboardSaveMeta({full:completeFull,inProgress:false,mode,start,end,since,lastSyncAt:new Date().toISOString(),total,rawCount,pageNo});
     fillFilters();page=1;render();
     $('status').textContent=mode==='full'
       ?`${data.length.toLocaleString('pt-BR')} itens salvos no cache — carga completa concluída (${rawCount.toLocaleString('pt-BR')} pedidos consultados)`
       :(rawCount?`${data.length.toLocaleString('pt-BR')} itens no cache — ${rawCount.toLocaleString('pt-BR')} pedidos novos verificados`:'Nenhum pedido novo; cache histórico mantido');
   }catch(e){
     await dashboardWriteCache(data).catch(()=>{});
-    dashboardSaveMeta({...meta,full:meta.full||false,inProgress:true,mode,start,end,since,next,total,rawCount});
+    dashboardSaveMeta({...meta,full:meta.full||false,inProgress:true,mode,start,end,since,next,total,rawCount,pageNo});
     fillFilters();render();
     $('status').textContent=`${data.length.toLocaleString('pt-BR')} itens mantidos no cache; falha após a página ${pageNo||0}`;
     $('msg').textContent='Detalhe da API: '+e.message;
