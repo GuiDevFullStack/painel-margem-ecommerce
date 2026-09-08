@@ -19,7 +19,7 @@
       <div class="field"><label>Ano</label><select id="year"><option value="">Todos</option></select></div>
       <div class="field"><label>Data inicial</label><input id="from" type="date"></div>
       <div class="field"><label>Data final</label><input id="to" type="date"></div>
-      <button class="primary" onclick="applyFilters()">Aplicar filtros</button><button onclick="clearFilters()">Limpar</button><button onclick="loadApi(true)">Atualizar mês atual</button>
+      <button class="primary" onclick="applyFilters()">Aplicar filtros</button><button onclick="clearFilters()">Limpar</button><button onclick="atualizarPedidosDoDia()">Atualizar pedidos de hoje</button><button class="primary" onclick="atualizarTodosPedidos()">Atualizar todos os pedidos</button>
     </div>
     <div class="grid"><div class="card"><div class="metric-label">Vendas</div><div class="metric" id="sale">R$ 0,00</div></div><div class="card"><div class="metric-label">Custo PMC</div><div class="metric" id="cost">R$ 0,00</div></div><div class="card"><div class="metric-label">Custos da plataforma</div><div class="metric" id="fee">R$ 0,00</div></div><div class="card"><div class="metric-label">Lucro líquido</div><div class="metric" id="profit">R$ 0,00</div></div></div>
     <div class="card"><h3>Resumo por plataforma</h3><table><thead><tr><th>Plataforma</th><th>Pedidos</th><th>Vendas</th><th>PMC</th><th>Custos</th><th>Lucro líquido</th><th>Margem</th></tr></thead><tbody id="summary"></tbody></table></div>
@@ -52,7 +52,11 @@ function cancelCostEdit(){editingCost=null;$('cancelCost').classList.add('hidden
 function readFile(f){return f.arrayBuffer().then(b=>{let w=XLSX.read(b,{type:'array'});return XLSX.utils.sheet_to_json(w.Sheets[w.SheetNames[0]],{defval:''})})}async function loadPMC(){let f=$('pf').files[0];if(!f)return;$('msg').textContent='Importando PMC...';let rows=await readFile(f);pmc={};rows.forEach(r=>{let sk=Object.keys(r).find(k=>/sku|c[oó]digo/i.test(k)),pk=Object.keys(r).find(k=>k.trim().toUpperCase()==='PMC');if(sk)pmc[cleanSku(r[sk])]=num(r[pk])});localStorage.setItem(PMC_KEY,JSON.stringify(pmc));$('msg').textContent=`${Object.keys(pmc).length.toLocaleString('pt-BR')} SKUs PMC importados.`;render()}
 function exportPMC(){let rows=['SKU,PMC',...Object.keys(pmc).sort().map(k=>`${k},${pmc[k]??''}`)],a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8'}));a.download='sku-pmc.csv';a.click()}
 async function loadApi(force=false){if(loading)return;let cached=localStorage.getItem(CACHE_KEY);if(cached&&!force){try{data=JSON.parse(cached);fillFilters();render();$('status').textContent=`${data.length.toLocaleString('pt-BR')} itens carregados do cache local — filtros locais ativos`;return}catch{localStorage.removeItem(CACHE_KEY)}}loading=true;let end=new Date().toISOString().slice(0,10),raw=[],next='',total=0,seenPages=new Set();try{do{let url=API_URL+'?start=2020-01-01&end='+end+'&limit=100'+(next?'&next='+encodeURIComponent(next):'');$('status').innerHTML='<span class="loading-dot"></span>Carregando pedidos: '+raw.length.toLocaleString('pt-BR')+(total?' de '+total.toLocaleString('pt-BR'):'')+' — datas antigas serão salvas no cache';let r=await fetch(url);if(!r.ok)throw new Error(`HTTP ${r.status}`);let j=await r.json(),part=j.result||j.orders||j.data||[];if(!Array.isArray(part)||!part.length)break;let last=part[part.length-1]?.Order||part[part.length-1],lastId=last?.id||last?.order_id||'',signature=part.map(x=>(x.Order||x).id||'').join('|');if(seenPages.has(signature))break;seenPages.add(signature);raw.push(...part);total=Number(j.total||total);if(part.length<100||!lastId||lastId===next)break;next=String(lastId);if(raw.length>100000)break}while(true);let received=normalizeOrders({result:raw});if(!received.length)throw new Error('A API retornou zero itens');data=received;localStorage.setItem(CACHE_KEY,JSON.stringify(data));fillFilters();page=1;render();$('status').textContent=`${received.length.toLocaleString('pt-BR')} itens carregados e salvos no cache local (${[...new Set(raw.map((x=>x.Order||x).id))].length.toLocaleString('pt-BR')} pedidos únicos)`}catch(e){let partial=raw.length?normalizeOrders({result:raw}):[];if(partial.length){data=partial;localStorage.setItem(CACHE_KEY,JSON.stringify(data));fillFilters();render();$('status').textContent=`${partial.length.toLocaleString('pt-BR')} itens salvos no cache; a API interrompeu a próxima página (${total.toLocaleString('pt-BR')} pedidos informados)`;$('msg').textContent='A primeira página foi preservada sem duplicação. O proxy precisa repassar o parâmetro next para carregar as páginas restantes.'}else if(data.length){$('status').textContent=`${data.length.toLocaleString('pt-BR')} itens no cache — API indisponível`;$('msg').textContent='Não foi possível atualizar agora: '+e.message}else{$('status').textContent='Falha ao carregar a API: '+e.message;$('msg').textContent='Verifique a conexão e tente recarregar a página.'}}finally{loading=false}}
-function init(){for(let i=1;i<=12;i++)$('month').insertAdjacentHTML('beforeend',`<option value="${i}">${i}</option>`);['plat','month','year','from','to'].forEach(id=>$(id).addEventListener('change',()=>{page=1;render()}));drawCosts();$('costBtn').disabled=false;render();loadApi()}init();
+async function iniciarCacheSemApi(){try{let cached=await dashboardReadCache();if(cached.length){data=cached;fillFilters();render();$('status').textContent=`${data.length.toLocaleString('pt-BR')} itens carregados do cache local — nenhuma consulta feita ao abrir a página`}else{$('status').textContent='Nenhum pedido no cache. Use "Atualizar todos os pedidos" para fazer a primeira carga.'}}catch(e){$('status').textContent='Cache local indisponível. Use "Atualizar todos os pedidos" para carregar os pedidos.'}}
+function atualizarPedidosDoDia(){if(loading)return Promise.resolve();return loadApi(true,'day')}
+async function atualizarTodosPedidos(){if(loading)return;let hoje=dashboardToday(),meta=dashboardMeta();dashboardSaveMeta({...meta,full:false,inProgress:false,mode:'full',start:'2000-01-01',end:hoje,since:'',next:'',lastSyncAt:''});return loadApi(true,'full')}
+function iniciarAtualizacaoAutomatica(){setInterval(()=>{if(!loading)atualizarPedidosDoDia()},5*60*1000)}
+function init(){for(let i=1;i<=12;i++)$('month').insertAdjacentHTML('beforeend',`<option value="${i}">${i}</option>`);['plat','month','year','from','to'].forEach(id=>$(id).addEventListener('change',()=>{page=1;render()}));drawCosts();$('costBtn').disabled=false;render();iniciarCacheSemApi();iniciarAtualizacaoAutomatica()}init();
 function dashboardPagingId(row){let q=row?.Order||row?.order||row||{},s=Array.isArray(q.shipments)?q.shipments[0]:q.shipments;return String(q.id??q.pluggto_id??q.pluggId??q.order_id??q._id??s?.id??'').trim()}
 function dashboardCursor(payload,rows){let v=payload?.next??payload?.next_page??payload?.nextPage??payload?.paging?.next??payload?.pagination?.next??payload?.meta?.next;if(v&&typeof v==='object')v=v.id??v.cursor??v.next??v.value;if(typeof v==='string'&&v.includes('?')){try{v=new URL(v).searchParams.get('next')||v}catch{}}return String(v||dashboardPagingId(rows[rows.length-1])||'').trim()}
 function dashboardPageKey(rows){return rows.map((row,i)=>dashboardPagingId(row)||JSON.stringify(row).slice(0,160)||String(i)).join('|')}
@@ -81,7 +85,7 @@ const renderOriginal=render;render=function(){renderOriginal();document.querySel
 
 // Sincronização incremental: a carga completa ocorre uma vez; depois consultamos
 // somente pedidos criados desde o último ponto salvo no cache local.
-async function loadApi(force=false){
+async function loadApi(force=false,requestedMode='auto'){
   if(loading)return;
   loading=true;
   let pageNo=Number(dashboardMeta().pageNo||0),rawCount=0,total=0,next='',rawSeen=new Set(),meta=dashboardMeta(),mode='full',start='2000-01-01',end=dashboardToday(),since='';
@@ -93,9 +97,15 @@ async function loadApi(force=false){
       $('status').textContent=`${data.length.toLocaleString('pt-BR')} itens no cache — sincronização recente mantida; nenhuma consulta necessária`;
       loading=false;return;
     }
-    let resumable=Boolean(meta.inProgress&&meta.next!==undefined&&meta.start&&meta.end&&(meta.mode==='full'||meta.mode==='incremental'));
+    let resumable=Boolean(requestedMode==='auto'&&meta.inProgress&&meta.next!==undefined&&meta.start&&meta.end&&(meta.mode==='full'||meta.mode==='incremental'));
     if(!resumable)pageNo=0;
-    if(resumable){
+    if(requestedMode==='full'){
+      mode='full';start='2000-01-01';end=today;since='';next='';
+    }else if(requestedMode==='day'){
+      mode='day';start=today;end=today;
+      let checkpoint=meta.lastDaySyncAt||'';
+      if(checkpoint){let t=Date.parse(checkpoint);since=Number.isFinite(t)?new Date(Math.max(0,t-1000)).toISOString():checkpoint}
+    }else if(resumable){
       mode=meta.mode;start=meta.start;end=meta.end;since=meta.since||'';next=String(meta.next||'');
     }else if(meta.full&&data.length){
       mode='incremental';start=currentStart;end=today;
@@ -106,14 +116,14 @@ async function loadApi(force=false){
       }
     }
     let retomando=Boolean(resumable&&mode==='full');
-    $('status').innerHTML=`<span class="loading-dot"></span>${retomando?'Retomando carga histórica':'Carregando todas as vendas'} no cache...`;
+    $('status').innerHTML=`<span class="loading-dot"></span>${retomando?'Retomando carga histórica':mode==='day'?'Atualizando pedidos de hoje':'Carregando todas as vendas'}...`;
     do{
       pageNo++;
       let url=new URL(API_URL);
       url.searchParams.set('start',start);url.searchParams.set('end',end);url.searchParams.set('limit','100');
       if(since)url.searchParams.set('since',since);
       if(next)url.searchParams.set('next',next);
-      $('status').innerHTML=`<span class="loading-dot"></span>${retomando?'Retomando carga histórica':mode==='full'?'Carregando todas as vendas':'Verificando novos pedidos'}: ${rawCount.toLocaleString('pt-BR')}${total?' de '+total.toLocaleString('pt-BR'):''} — página ${pageNo}`;
+      $('status').innerHTML=`<span class="loading-dot"></span>${retomando?'Retomando carga histórica':mode==='full'?'Carregando todas as vendas':mode==='day'?'Atualizando pedidos de hoje':'Verificando novos pedidos'}: ${rawCount.toLocaleString('pt-BR')}${total?' de '+total.toLocaleString('pt-BR'):''} — página ${pageNo}`;
       let response=await fetch(url.toString()),body=await response.text();
       if(!response.ok)throw new Error(`HTTP ${response.status}: ${body.slice(0,240)}`);
       let payload=JSON.parse(body),part=payload.result||payload.orders||payload.data||[];
@@ -134,10 +144,12 @@ async function loadApi(force=false){
       if(rawCount>200000)throw new Error('Limite de segurança de 200.000 pedidos atingido');
     }while(true);
     let completeFull=mode==='full'||Boolean(meta.full);
-    dashboardSaveMeta({full:completeFull,inProgress:false,mode,start,end,since,lastSyncAt:new Date().toISOString(),total,rawCount,pageNo});
+    dashboardSaveMeta({full:completeFull,inProgress:false,mode,start,end,since,lastSyncAt:new Date().toISOString(),lastDaySyncAt:mode==='day'?new Date().toISOString():(meta.lastDaySyncAt||''),total,rawCount,pageNo});
     fillFilters();page=1;render();
     $('status').textContent=mode==='full'
       ?`${data.length.toLocaleString('pt-BR')} itens salvos no cache — carga completa concluída (${rawCount.toLocaleString('pt-BR')} pedidos consultados)`
+      :mode==='day'
+      ?`${data.length.toLocaleString('pt-BR')} itens no cache — pedidos de hoje atualizados (${rawCount.toLocaleString('pt-BR')} consultados)`
       :(rawCount?`${data.length.toLocaleString('pt-BR')} itens no cache — ${rawCount.toLocaleString('pt-BR')} pedidos novos verificados`:'Nenhum pedido novo; cache histórico mantido');
   }catch(e){
     await dashboardWriteCache(data).catch(()=>{});
