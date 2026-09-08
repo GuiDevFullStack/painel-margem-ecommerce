@@ -89,12 +89,7 @@ async function loadApi(force=false){
     let cached=await dashboardReadCache();
     if(cached.length){data=cached;fillFilters();render()}
     let today=dashboardToday(),currentStart=today.slice(0,7)+'-01',lastSync=Date.parse(meta.lastSyncAt||meta.lastSync||'');
-    if(!force&&data.length&&!meta.full){
-      dashboardSaveMeta({...meta,full:true,inProgress:false,mode:'incremental',start:currentStart,end:today,since:'',lastSyncAt:new Date().toISOString(),rawCount:0,pageNo:0});
-      $('status').textContent=`${data.length.toLocaleString('pt-BR')} itens no cache — carga histórica preservada; nenhuma consulta necessária agora`;
-      loading=false;return;
-    }
-    if(!force&&meta.full&&data.length&&Number.isFinite(lastSync)&&Date.now()-lastSync<5*60*1000){
+    if(!force&&meta.full&&!meta.inProgress&&data.length&&Number.isFinite(lastSync)&&Date.now()-lastSync<5*60*1000){
       $('status').textContent=`${data.length.toLocaleString('pt-BR')} itens no cache — sincronização recente mantida; nenhuma consulta necessária`;
       loading=false;return;
     }
