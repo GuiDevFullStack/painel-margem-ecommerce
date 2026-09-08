@@ -1,172 +1,1850 @@
 <!doctype html>
 <html lang="pt-BR">
-<head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Painel de Margem</title>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <style>
-    *{box-sizing:border-box}body{font:14px Arial;margin:0;background:#f4f6fb;color:#172033}header{background:#111a2e;color:#fff;padding:22px}header h2{margin:0 0 8px}#status{display:block}.loading-dot{display:inline-block;width:10px;height:10px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;margin-right:6px}@keyframes spin{to{transform:rotate(360deg)}}main{max-width:1400px;margin:22px auto;padding:0 20px}.tabs button,.primary,button{padding:10px 15px;border:0;border-radius:8px;margin-right:6px;cursor:pointer}.primary,.active{background:#356ae6;color:#fff}.card{background:#fff;border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 3px 14px #0001}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metric{font-size:25px;font-weight:bold;margin-top:8px}.metric-label{color:#68758a;font-size:13px}.row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:5px;min-width:170px}.field input,.field select{padding:9px;border:1px solid #d6ddeb;border-radius:7px;background:#fff}table{width:100%;border-collapse:collapse}td,th{padding:9px;border-bottom:1px solid #edf0f5;text-align:left}.muted{color:#748096}.hidden{display:none}.orders{display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:16px}.order{background:#fbfcff;border:1px solid #dfe6f2;border-radius:12px;padding:16px}.order b,.order-id{color:#245de0}.order h4{margin:0}.order-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.order-meta{color:#68758a;line-height:1.5;text-align:right}.order-metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:12px 0}.order-metric{background:#fff;border:1px solid #e6ebf4;border-radius:8px;padding:9px}.order-metric strong{display:block;margin-top:4px}.order-lines{font-size:12px;margin:10px 0}.order-lines td,.order-lines th{padding:7px 4px}.order-lines th{color:#68758a;font-weight:normal}.order-total{border-top:1px solid #aeb8ca;padding-top:12px;display:grid;grid-template-columns:repeat(2,1fr);gap:8px 12px}.order-total span{color:#68758a}.order-total strong{display:block;color:#172033;margin-top:3px}.order-total span:last-child strong{color:#245de0}.pager{display:flex;justify-content:center;align-items:center;gap:12px;margin-top:18px}.pager button:disabled{opacity:.45;cursor:not-allowed}.small{font-size:12px}@media(max-width:800px){.grid{grid-template-columns:2fr 2fr}.order{width:auto}.order-meta{text-align:left}.order-top{display:block}}
-  </style>
-</head>
-<body>
-<header><h2>Margem E-commerce</h2><span id="status">Nenhuma base carregada</span></header>
-<main>
-  <nav class="tabs"><button class="active" onclick="tab('dash',this)">Vendas</button><button id="costBtn" disabled onclick="tab('costs',this)">Custos</button><button onclick="tab('up',this)">Importar bases</button></nav>
-  <section id="dash">
-    <div class="card row">
-      <div class="field"><label>Marketplace</label><select id="plat"><option value="">Todos</option></select></div>
-      <div class="field"><label>Mês</label><select id="month"><option value="">Todos</option></select></div>
-      <div class="field"><label>Ano</label><select id="year"><option value="">Todos</option></select></div>
-      <div class="field"><label>Data inicial</label><input id="from" type="date"></div>
-      <div class="field"><label>Data final</label><input id="to" type="date"></div>
-      <button class="primary" onclick="applyFilters()">Aplicar filtros</button><button onclick="clearFilters()">Limpar</button><button onclick="atualizarPedidosDoDia()">Atualizar pedidos de hoje</button><button class="primary" onclick="atualizarTodosPedidos()">Atualizar todos os pedidos</button>
-    </div>
-    <div class="grid"><div class="card"><div class="metric-label">Vendas</div><div class="metric" id="sale">R$ 0,00</div></div><div class="card"><div class="metric-label">Custo PMC</div><div class="metric" id="cost">R$ 0,00</div></div><div class="card"><div class="metric-label">Custos da plataforma</div><div class="metric" id="fee">R$ 0,00</div></div><div class="card"><div class="metric-label">Lucro líquido</div><div class="metric" id="profit">R$ 0,00</div></div></div>
-    <div class="card"><h3>Resumo por plataforma</h3><table><thead><tr><th>Plataforma</th><th>Pedidos</th><th>Vendas</th><th>PMC</th><th>Custos</th><th>Lucro líquido</th><th>Margem</th></tr></thead><tbody id="summary"></tbody></table></div>
-    <div class="card"><h3>Lucro real por pedido</h3><p class="muted small" id="orderCount"></p><div id="orders" class="orders"></div><div id="pager" class="pager"></div></div>
-  </section>
-  <section id="costs" class="hidden"><div class="card"><h2>Custos por plataforma</h2><div class="row"><div class="field"><label>Marketplace</label><select id="cp"></select></div><div class="field"><label>Nome do custo</label><input id="cn" placeholder="Comissão, frete..."></div><div class="field"><label>Taxa (%)</label><input id="cr" type="number" step=".01"></div><div class="field"><label>Fixo/pedido</label><input id="cf" type="number" step=".01"></div><button class="primary" onclick="saveCost()">Salvar</button><button id="cancelCost" class="hidden" onclick="cancelCostEdit()">Cancelar</button></div><table><thead><tr><th>Marketplace</th><th>Nome</th><th>Taxa</th><th>Fixo/pedido</th><th>Ações</th></tr></thead><tbody id="costRows"></tbody></table></div></section>
-  <section id="up" class="hidden"><div class="card"><h2>Gerenciar SKUs e PMCs</h2><p class="muted">A venda vem da API. Os PMCs ficam salvos no Worker e compartilhados entre os navegadores.</p><div class="row"><div class="field"><label>PMC</label><input id="pf" type="file" accept=".xlsx,.xls,.csv"></div><button class="primary" onclick="loadPMC()">Importar PMC</button><button onclick="exportPMC()">Exportar SKU/PMC</button></div><p id="msg" class="muted"></p></div><div class="card"><h3>SKUs sem PMC</h3><table><thead><tr><th>SKU</th><th>Status</th></tr></thead><tbody id="missingPMC"></tbody></table></div></section>
-</main>
-<script>
-const API_URL='https://pluggto-proxy.guilhermepaulino-wapssolutions.workers.dev/orders-dashboard',CACHE_KEY='painel-orders-cache-v11',PMC_KEY='painel-pmc-v5';
-let data=[],pmc=JSON.parse(localStorage.getItem(PMC_KEY)||'{}'),costs=JSON.parse(localStorage.getItem('costs')||'{}'),page=1,editingCost=null,loading=false;
-const $=id=>document.getElementById(id),money=x=>(Number(x)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),num=x=>{if(typeof x==='number')return x;let t=String(x??'').replace(/R\$\s?/g,'').trim();if(t.includes(',')&&t.includes('.'))t=t.replace(/\./g,'').replace(',','.');else if(t.includes(','))t=t.replace(',','.');return parseFloat(t)||0},cleanSku=x=>String(x??'').replace(/^\*/,'').replace(/-/g,'').trim().toUpperCase(),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function apiDate(v){let s=String(v||'');if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,19);let m=s.match(/(\d{2})[-/](\d{2})[-/](\d{4})(?:\s+(\d{2}:\d{2}:\d{2}))?/);return m?`${m[3]}-${m[2]}-${m[1]}T${m[4]||'00:00:00'}`:''}
-function tab(id,b){document.querySelectorAll('section').forEach(x=>x.classList.add('hidden'));$(id).classList.remove('hidden');document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active')}
-function platformOf(q){let s=Array.isArray(q.shipments)?q.shipments[0]:q.shipments;return q.channel||s?.channel||q.Canal||q.marketplace||'Sem plataforma'}
-function orderOf(q,n){let s=Array.isArray(q.shipments)?q.shipments[0]:q.shipments;return String(q.original_id||s?.original_id||q.external||s?.external||q.id||q.order_id||`Pedido-${n}`).split(',')[0].trim()||`Pedido-${n}`}
-function itemValue(i,name){let a=i.attributes;if(Array.isArray(a))a=a.find(x=>x&&((x.name||x.key)===name))||{};return a?.[name]??i[name]??i[name==='quantity'?'qty':'total']}
-function normalizeOrders(json){let rows=Array.isArray(json)?json:(json.result||json.orders||json.data||[]),seen=new Set();return rows.map((x,n)=>x.Order||x).filter((q,n)=>{let id=orderOf(q,n);if(seen.has(id))return false;seen.add(id);return true}).flatMap((q,n)=>{let s=Array.isArray(q.shipments)?q.shipments[0]:q.shipments,items=q.items||s?.items||[],date=apiDate(q.created||s?.created||q['Criado em']||q.created_at);return items.map(i=>{let z=cleanSku(i.variation?.sku||i.sku||i.SKU),qty=num(itemValue(i,'quantity')),price=num(itemValue(i,'price')??i.total);return z?{order:orderOf(q,n),date,platform:platformOf(q),sku:z,qty,sale:price*qty}:null}).filter(Boolean)})}
-function fillFilters(){let p=[...new Set(data.map(x=>x.platform).filter(Boolean))].sort((a,b)=>a.localeCompare(b)),y=[...new Set(data.map(x=>x.date.slice(0,4)).filter(Boolean))].sort(),oldP=$('plat').value,oldY=$('year').value;$('plat').innerHTML='<option value="">Todos</option>'+p.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');$('year').innerHTML='<option value="">Todos</option>'+y.map(x=>`<option value="${x}">${x}</option>`).join('');if(p.includes(oldP))$('plat').value=oldP;if(y.includes(oldY))$('year').value=oldY;$('cp').innerHTML=p.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')||'<option value="">Nenhuma plataforma carregada</option>'}
-function platformCost(p){return Object.values(costs).filter(x=>x.platform===p).reduce((a,x)=>({rate:a.rate+num(x.rate),fix:a.fix+num(x.fix)}),{rate:0,fix:0})}
-function filtered(){let m=$('month').value,y=$('year').value,st=$('from').value,en=$('to').value,p=$('plat').value;return data.filter(x=>{let d=x.date.slice(0,10);return(!p||x.platform===p)&&(!m||d.slice(5,7)===String(m).padStart(2,'0'))&&(!y||d.slice(0,4)===y)&&(!st||d>=st)&&(!en||d<=en)})}
-function groupOrders(lines){let g={};lines.forEach(x=>(g[x.order]??=[]).push(x));return Object.values(g).map(v=>{v.sort((a,b)=>a.sku.localeCompare(b.sku));let sale=v.reduce((s,x)=>s+x.sale,0),pm=v.reduce((s,x)=>s+num(pmc[x.sku])*x.qty,0),c=platformCost(v[0].platform),fee=sale*c.rate/100+c.fix,rows=v.map(x=>{let productPmc=num(pmc[x.sku])*x.qty,share=sale?x.sale/sale:1/v.length,productFee=x.sale*c.rate/100+c.fix*share;return {...x,productPmc,productFee,profit:x.sale-productPmc-productFee}});return{order:v[0].order,date:v[0].date,platform:v[0].platform,lines:rows,sale,pmc:pm,fee,profit:sale-pm-fee}}).sort((a,b)=>String(b.date).localeCompare(String(a.date)))}
-function render(){let orders=groupOrders(filtered()),S=orders.reduce((s,x)=>s+x.sale,0),M=orders.reduce((s,x)=>s+x.pmc,0),F=orders.reduce((s,x)=>s+x.fee,0);$('sale').textContent=money(S);$('cost').textContent=money(M);$('fee').textContent=money(F);$('profit').textContent=money(S-M-F);let by={};orders.forEach(o=>(by[o.platform]??=[]).push(o));$('summary').innerHTML=Object.entries(by).map(([p,v])=>{let s=v.reduce((a,x)=>a+x.sale,0),f=v.reduce((a,x)=>a+x.profit,0);return`<tr><td>${esc(p)}</td><td>${v.length}</td><td>${money(s)}</td><td>${money(f)}</td><td>${s?(f/s*100).toFixed(1):'0.0'}%</td></tr>`}).join('')||'<tr><td colspan="5">Nenhum pedido encontrado.</td></tr>';$('orderCount').textContent=`${orders.length.toLocaleString('pt-BR')} pedido(s) encontrado(s)`;let totalPages=Math.max(1,Math.ceil(orders.length/20));if(page>totalPages)page=totalPages;let visible=orders.slice((page-1)*20,page*20);$('orders').innerHTML=visible.map(o=>`<article class="order"><h4 class="order-id">${esc(o.order)}</h4><div>${esc(o.platform)}<br>${esc(o.date.replace('T',' '))}</div><table class="order-lines"><thead><tr><th>SKU</th><th>Qtd</th><th>Líquido</th></tr></thead><tbody>${o.lines.map(x=>`<tr><td>${esc(x.sku)}<br><span class="small">Venda ${money(x.sale)} · PMC ${money(x.productPmc)}</span></td><td>${x.qty}</td><td>${money(x.profit)}</td></tr>`).join('')}</tbody></table><div class="order-total">Venda: ${money(o.sale)}<br>PMC: ${money(o.pmc)}<br>Custos: ${money(o.fee)}<br><b>Lucro líquido: ${money(o.profit)}</b><br>Margem: ${o.sale?(o.profit/o.sale*100).toFixed(1):'0.0'}%</div></article>`).join('')||'<p>Nenhum pedido encontrado.</p>';$('pager').innerHTML=totalPages>1?`<button onclick="changePage(-1)" ${page===1?'disabled':''}>Anterior</button><span>Página ${page} de ${totalPages}</span><button onclick="changePage(1)" ${page===totalPages?'disabled':''}>Próxima</button>`:'';renderMissing()}
-function changePage(n){page+=n;render();window.scrollTo({top:$('orders').offsetTop-20,behavior:'smooth'})}function applyFilters(){page=1;render()}function clearFilters(){['plat','month','year','from','to'].forEach(id=>$(id).value='');page=1;render()}
-function renderMissing(){let missing=[...new Set(data.filter(x=>!num(pmc[x.sku])).map(x=>x.sku))].sort();$('missingPMC').innerHTML=missing.map(x=>`<tr><td>${esc(x)}</td><td>PMC não cadastrado</td></tr>`).join('')||'<tr><td colspan="2">Nenhum SKU sem PMC.</td></tr>'}
-function drawCosts(){$('costRows').innerHTML=Object.entries(costs).map(([k,x])=>`<tr><td>${esc(x.platform)}</td><td>${esc(x.name)}</td><td>${num(x.rate)}%</td><td>${money(x.fix)}</td><td><button onclick="editCost('${esc(k)}')">Editar</button><button onclick="deleteCost('${esc(k)}')">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5">Nenhum custo cadastrado.</td></tr>'}
-function saveCost(){let p=$('cp').value,n=$('cn').value.trim()||'Custo',k=editingCost||p+'|'+n;costs[k]={platform:p,name:n,rate:num($('cr').value),fix:num($('cf').value)};localStorage.setItem('costs',JSON.stringify(costs));editingCost=null;$('cancelCost').classList.add('hidden');$('cn').value='';$('cr').value='';$('cf').value='';drawCosts();render()}
-function editCost(k){let x=costs[k];if(!x)return;editingCost=k;$('cp').value=x.platform;$('cn').value=x.name;$('cr').value=x.rate;$('cf').value=x.fix;$('cancelCost').classList.remove('hidden')}
-function cancelCostEdit(){editingCost=null;$('cancelCost').classList.add('hidden');$('cn').value='';$('cr').value='';$('cf').value=''}function deleteCost(k){if(confirm('Excluir este custo?')){delete costs[k];localStorage.setItem('costs',JSON.stringify(costs));drawCosts();render()}}
-function readFile(f){return f.arrayBuffer().then(b=>{let w=XLSX.read(b,{type:'array'});return XLSX.utils.sheet_to_json(w.Sheets[w.SheetNames[0]],{defval:''})})}async function loadPMC(){let f=$('pf').files[0];if(!f)return;$('msg').textContent='Importando PMC...';let rows=await readFile(f);pmc={};rows.forEach(r=>{let sk=Object.keys(r).find(k=>/sku|c[oó]digo/i.test(k)),pk=Object.keys(r).find(k=>k.trim().toUpperCase()==='PMC');if(sk)pmc[cleanSku(r[sk])]=num(r[pk])});localStorage.setItem(PMC_KEY,JSON.stringify(pmc));$('msg').textContent=`${Object.keys(pmc).length.toLocaleString('pt-BR')} SKUs PMC importados.`;render()}
-function exportPMC(){let rows=['SKU,PMC',...Object.keys(pmc).sort().map(k=>`${k},${pmc[k]??''}`)],a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8'}));a.download='sku-pmc.csv';a.click()}
-async function loadApi(force=false){if(loading)return;let cached=localStorage.getItem(CACHE_KEY);if(cached&&!force){try{data=JSON.parse(cached);fillFilters();render();$('status').textContent=`${data.length.toLocaleString('pt-BR')} itens carregados do cache local — filtros locais ativos`;return}catch{localStorage.removeItem(CACHE_KEY)}}loading=true;let end=new Date().toISOString().slice(0,10),raw=[],next='',total=0,seenPages=new Set();try{do{let url=API_URL+'?start=2020-01-01&end='+end+'&limit=100'+(next?'&next='+encodeURIComponent(next):'');$('status').innerHTML='<span class="loading-dot"></span>Carregando pedidos: '+raw.length.toLocaleString('pt-BR')+(total?' de '+total.toLocaleString('pt-BR'):'')+' — datas antigas serão salvas no cache';let r=await fetch(url);if(!r.ok)throw new Error(`HTTP ${r.status}`);let j=await r.json(),part=j.result||j.orders||j.data||[];if(!Array.isArray(part)||!part.length)break;let last=part[part.length-1]?.Order||part[part.length-1],lastId=last?.id||last?.order_id||'',signature=part.map(x=>(x.Order||x).id||'').join('|');if(seenPages.has(signature))break;seenPages.add(signature);raw.push(...part);total=Number(j.total||total);if(part.length<100||!lastId||lastId===next)break;next=String(lastId);if(raw.length>100000)break}while(true);let received=normalizeOrders({result:raw});if(!received.length)throw new Error('A API retornou zero itens');data=received;localStorage.setItem(CACHE_KEY,JSON.stringify(data));fillFilters();page=1;render();$('status').textContent=`${received.length.toLocaleString('pt-BR')} itens carregados e salvos no cache local (${[...new Set(raw.map((x=>x.Order||x).id))].length.toLocaleString('pt-BR')} pedidos únicos)`}catch(e){let partial=raw.length?normalizeOrders({result:raw}):[];if(partial.length){data=partial;localStorage.setItem(CACHE_KEY,JSON.stringify(data));fillFilters();render();$('status').textContent=`${partial.length.toLocaleString('pt-BR')} itens salvos no cache; a API interrompeu a próxima página (${total.toLocaleString('pt-BR')} pedidos informados)`;$('msg').textContent='A primeira página foi preservada sem duplicação. O proxy precisa repassar o parâmetro next para carregar as páginas restantes.'}else if(data.length){$('status').textContent=`${data.length.toLocaleString('pt-BR')} itens no cache — API indisponível`;$('msg').textContent='Não foi possível atualizar agora: '+e.message}else{$('status').textContent='Falha ao carregar a API: '+e.message;$('msg').textContent='Verifique a conexão e tente recarregar a página.'}}finally{loading=false}}
-async function iniciarCacheSemApi(){try{let cached=await dashboardReadCache();if(cached.length){data=cached;fillFilters();render();$('status').textContent=`${data.length.toLocaleString('pt-BR')} itens carregados do cache local — nenhuma consulta feita ao abrir a página`}else{$('status').textContent='Nenhum pedido no cache. Use "Atualizar todos os pedidos" para fazer a primeira carga.'}}catch(e){$('status').textContent='Cache local indisponível. Use "Atualizar todos os pedidos" para carregar os pedidos.'}}
-function atualizarPedidosDoDia(){if(loading)return Promise.resolve();return loadApi(true,'day')}
-async function atualizarTodosPedidos(){if(loading)return;let hoje=dashboardToday(),meta=dashboardMeta();dashboardSaveMeta({...meta,full:false,inProgress:false,mode:'full',start:'2000-01-01',end:hoje,since:'',next:'',lastSyncAt:''});return loadApi(true,'full')}
-function iniciarAtualizacaoAutomatica(){setInterval(()=>{if(!loading)atualizarPedidosDoDia()},5*60*1000)}
-function init(){for(let i=1;i<=12;i++)$('month').insertAdjacentHTML('beforeend',`<option value="${i}">${i}</option>`);['plat','month','year','from','to'].forEach(id=>$(id).addEventListener('change',()=>{page=1;render()}));drawCosts();$('costBtn').disabled=false;render();iniciarCacheSemApi();iniciarAtualizacaoAutomatica()}init();
-function dashboardPagingId(row){let q=row?.Order||row?.order||row||{},s=Array.isArray(q.shipments)?q.shipments[0]:q.shipments;return String(q.id??q.pluggto_id??q.pluggId??q.order_id??q._id??s?.id??'').trim()}
-function dashboardCursor(payload,rows){let v=payload?.next??payload?.next_page??payload?.nextPage??payload?.paging?.next??payload?.pagination?.next??payload?.meta?.next;if(v&&typeof v==='object')v=v.id??v.cursor??v.next??v.value;if(typeof v==='string'&&v.includes('?')){try{v=new URL(v).searchParams.get('next')||v}catch{}}return String(v||dashboardPagingId(rows[rows.length-1])||'').trim()}
-function dashboardPageKey(rows){return rows.map((row,i)=>dashboardPagingId(row)||JSON.stringify(row).slice(0,160)||String(i)).join('|')}
-async function loadApi(force=false){if(loading)return;let cached=localStorage.getItem(CACHE_KEY);if(cached&&!force){try{data=JSON.parse(cached);fillFilters();render();$('status').textContent=`${data.length.toLocaleString('pt-BR')} itens carregados do cache local — filtros locais ativos`;return}catch{localStorage.removeItem(CACHE_KEY)}}loading=true;let end=new Date().toISOString().slice(0,10),raw=[],next='',total=0,pageNo=0,seenPages=new Set();try{do{pageNo++;let url=new URL(API_URL);url.searchParams.set('start','2020-01-01');url.searchParams.set('end',end);url.searchParams.set('limit','100');if(next)url.searchParams.set('next',next);$('status').innerHTML='<span class="loading-dot"></span>Carregando pedidos: '+raw.length.toLocaleString('pt-BR')+(total?' de '+total.toLocaleString('pt-BR'):'')+' — página '+pageNo+' — datas antigas serão salvas no cache';let r=await fetch(url.toString());let body=await r.text();if(!r.ok)throw new Error(`HTTP ${r.status}: ${body.slice(0,240)}`);let j=JSON.parse(body),part=j.result||j.orders||j.data||[];if(!Array.isArray(part)||!part.length)break;let key=dashboardPageKey(part);if(seenPages.has(key))throw new Error(`A API repetiu a página ${pageNo}; cursor enviado: ${next||'(primeira página)'}`);seenPages.add(key);raw.push(...part);total=Number(j.total??total);let cursor=dashboardCursor(j,part);if(!cursor||cursor===next){if(part.length>=100&&!cursor)throw new Error(`A API retornou ${part.length} pedidos sem cursor para a próxima página`);break}next=cursor;if(raw.length>100000)throw new Error('Limite de segurança de 100.000 pedidos atingido')}while(true);let received=normalizeOrders({result:raw});if(!received.length)throw new Error('A API retornou zero itens');data=received;localStorage.setItem(CACHE_KEY,JSON.stringify(data));fillFilters();page=1;render();$('status').textContent=`${received.length.toLocaleString('pt-BR')} itens carregados e salvos no cache local (${[...new Set(raw.map((x=>x.Order||x).id||dashboardPagingId(x)))].length.toLocaleString('pt-BR')} pedidos únicos)`}catch(e){let partial=raw.length?normalizeOrders({result:raw}):[];if(partial.length){data=partial;localStorage.setItem(CACHE_KEY,JSON.stringify(data));fillFilters();render();$('status').textContent=`${partial.length.toLocaleString('pt-BR')} itens salvos no cache; falha após a página ${pageNo} de ${total.toLocaleString('pt-BR')} pedidos informados`;$('msg').textContent='Detalhe da API: '+e.message}else if(data.length){$('status').textContent=`${data.length.toLocaleString('pt-BR')} itens no cache — API indisponível`;$('msg').textContent='Não foi possível atualizar agora: '+e.message}else{$('status').textContent='Falha ao carregar a API: '+e.message;$('msg').textContent='Verifique a conexão e tente recarregar a página.'}}finally{loading=false}}
-// Segunda definição intencional: substitui a rotina legada acima sem alterar as demais telas.
-async function loadApi(force=false){if(loading)return;let cached=localStorage.getItem(CACHE_KEY);if(cached&&!force){try{data=JSON.parse(cached);fillFilters();render();$('status').textContent=`${data.length.toLocaleString('pt-BR')} itens carregados do cache local — filtros locais ativos`;return}catch{localStorage.removeItem(CACHE_KEY)}}loading=true;let end=new Date().toISOString().slice(0,10),raw=[],next='',total=0,pageNo=0,seenPages=new Set();try{do{pageNo++;let url=new URL(API_URL);url.searchParams.set('start','2020-01-01');url.searchParams.set('end',end);url.searchParams.set('limit','100');if(next)url.searchParams.set('next',next);$('status').innerHTML='<span class="loading-dot"></span>Carregando pedidos: '+raw.length.toLocaleString('pt-BR')+(total?' de '+total.toLocaleString('pt-BR'):'')+' — página '+pageNo+' — datas antigas serão salvas no cache';let r=await fetch(url.toString()),body=await r.text();if(!r.ok)throw new Error(`HTTP ${r.status}: ${body.slice(0,240)}`);let j=JSON.parse(body),part=j.result||j.orders||j.data||[];if(!Array.isArray(part)||!part.length)break;let key=dashboardPageKey(part);if(seenPages.has(key))throw new Error(`A API repetiu a página ${pageNo}; cursor enviado: ${next||'(primeira página)'}`);seenPages.add(key);raw.push(...part);total=Number(j.total??total);let cursor=dashboardCursor(j,part);if(!cursor||cursor===next){if(part.length>=100&&!cursor)throw new Error(`A API retornou ${part.length} pedidos sem cursor para a próxima página`);break}next=cursor;if(raw.length>100000)throw new Error('Limite de segurança de 100.000 pedidos atingido')}while(true);let received=normalizeOrders({result:raw});if(!received.length)throw new Error('A API retornou zero itens');data=received;localStorage.setItem(CACHE_KEY,JSON.stringify(data));fillFilters();page=1;render();let unique=new Set(raw.map(x=>dashboardPagingId(x)||JSON.stringify(x))).size;$('status').textContent=`${received.length.toLocaleString('pt-BR')} itens carregados e salvos no cache local (${unique.toLocaleString('pt-BR')} pedidos únicos)`}catch(e){let partial=raw.length?normalizeOrders({result:raw}):[];if(partial.length){data=partial;localStorage.setItem(CACHE_KEY,JSON.stringify(data));fillFilters();render();$('status').textContent=`${partial.length.toLocaleString('pt-BR')} itens salvos no cache; falha após a página ${pageNo} de ${total.toLocaleString('pt-BR')} pedidos informados`;$('msg').textContent='Detalhe da API: '+e.message}else if(data.length){$('status').textContent=`${data.length.toLocaleString('pt-BR')} itens no cache — API indisponível`;$('msg').textContent='Não foi possível atualizar agora: '+e.message}else{$('status').textContent='Falha ao carregar a API: '+e.message;$('msg').textContent='Verifique a conexão e tente recarregar a página.'}}finally{loading=false}}
-const SYNC_META_KEY='painel-orders-sync-v3',ORDERS_DB_NAME='painel-orders-cache-db-v3',ORDERS_STORE='snapshots';
-function dashboardToday(){let d=new Date(),p=x=>String(x).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`}
-function dashboardOpenDb(){return new Promise((resolve,reject)=>{if(!window.indexedDB)return reject(new Error('IndexedDB indisponível'));let req=window.indexedDB.open(ORDERS_DB_NAME,1);req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains(ORDERS_STORE))req.result.createObjectStore(ORDERS_STORE)};req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('Não foi possível abrir o cache local'))})}
-async function dashboardReadCache(){let fallback=[];try{fallback=JSON.parse(localStorage.getItem(CACHE_KEY)||'[]')}catch{}try{let db=await dashboardOpenDb();let salvo=await new Promise((resolve,reject)=>{let req=db.transaction(ORDERS_STORE,'readonly').objectStore(ORDERS_STORE).get('all');req.onsuccess=()=>resolve(Array.isArray(req.result)?req.result:[]);req.onerror=()=>reject(req.error)});return salvo.length?salvo:fallback}catch{return fallback}}
-async function dashboardWriteCache(value){try{localStorage.setItem(CACHE_KEY,JSON.stringify(value))}catch{}try{let db=await dashboardOpenDb();await new Promise((resolve,reject)=>{let req=db.transaction(ORDERS_STORE,'readwrite').objectStore(ORDERS_STORE).put(value,'all');req.onsuccess=resolve;req.onerror=()=>reject(req.error)})}catch{}}
-function dashboardMeta(){try{return JSON.parse(localStorage.getItem(SYNC_META_KEY)||'{}')}catch{return{}}}
-function dashboardSaveMeta(value){localStorage.setItem(SYNC_META_KEY,JSON.stringify(value))}
-function dashboardMerge(existing,fresh){let ids=new Set(fresh.map(x=>x.order));return existing.filter(x=>!ids.has(x.order)).concat(fresh)}
-async function loadApi(force=false){if(loading)return;loading=true;let pageNo=0,rawCount=0,total=0,next='',rawSeen=new Set(),meta=dashboardMeta();try{let cached=await dashboardReadCache();if(cached.length){data=cached;fillFilters();render();$('status').innerHTML=`<span class="loading-dot"></span>Cache histórico carregado: ${data.length.toLocaleString('pt-BR')} itens. Atualizando o mês atual...`}let today=dashboardToday(),currentStart=today.slice(0,7)+'-01',resume=Boolean(meta.inProgress&&meta.next!==undefined&&meta.end&&(meta.mode==='full'||(meta.mode==='current'&&meta.start===currentStart&&meta.end===today))),full=resume?meta.mode==='full':!meta.full||!data.length,mode=full?'full':'current',start=full?'2000-01-01':currentStart,end=today;if(resume&&meta.start===start&&meta.end===end)next=String(meta.next||'');else if(mode==='current')data=data.filter(x=>{let d=String(x.date||'').slice(0,10);return d<start||d>end});if(!resume&&mode==='current')await dashboardWriteCache(data);do{pageNo++;let url=new URL(API_URL);url.searchParams.set('start',start);url.searchParams.set('end',end);url.searchParams.set('limit','100');if(next)url.searchParams.set('next',next);$('status').innerHTML='<span class="loading-dot"></span>Carregando '+(mode==='full'?'todas as vendas':'vendas do mês atual')+': '+rawCount.toLocaleString('pt-BR')+(total?' de '+total.toLocaleString('pt-BR'):'')+' pedidos — página '+pageNo;let response=await fetch(url.toString()),body=await response.text();if(!response.ok)throw new Error(`HTTP ${response.status}: ${body.slice(0,240)}`);let payload=JSON.parse(body),part=payload.result||payload.orders||payload.data||[];if(!Array.isArray(part)||!part.length)break;let key=dashboardPageKey(part);if(rawSeen.has(key))throw new Error(`A API repetiu a página ${pageNo}; cursor enviado: ${next||'(primeira página)'}`);rawSeen.add(key);rawCount+=part.length;total=Number(payload.total??total);let fresh=normalizeOrders({result:part});data=dashboardMerge(data,fresh);await dashboardWriteCache(data);let cursor=dashboardCursor(payload,part);if(!cursor||cursor===next){if(part.length>=100&&!cursor)throw new Error(`A API retornou 100 pedidos sem cursor para a próxima página`);break}next=cursor;dashboardSaveMeta({full:mode==='full'?false:Boolean(meta.full),inProgress:true,mode,start,end,next,total,rawCount})}while(true);let completeFull=mode==='full'||Boolean(meta.full);dashboardSaveMeta({full:completeFull,inProgress:false,mode,start,end,lastSync:today,total,rawCount});fillFilters();page=1;render();$('status').textContent=`${data.length.toLocaleString('pt-BR')} itens no cache — ${mode==='full'?'carga completa concluída':'mês atual atualizado'} (${rawCount.toLocaleString('pt-BR')} pedidos consultados)`}catch(e){await dashboardWriteCache(data).catch(()=>{});dashboardSaveMeta({...meta,full:meta.full||false,inProgress:true,mode:meta.mode||'full',start:meta.start||'2000-01-01',end:meta.end||dashboardToday(),next,total,rawCount});fillFilters();render();$('status').textContent=`${data.length.toLocaleString('pt-BR')} itens salvos no cache; falha após a página ${pageNo}`;$('msg').textContent='Detalhe da API: '+e.message}finally{loading=false}}
-const PMC_API_URL='https://pluggto-proxy.guilhermepaulino-wapssolutions.workers.dev/orders-dashboard-pmc';
-async function salvarPmcNoWorker(mapa){let r=await fetch(PMC_API_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pmc:mapa})});if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}
-async function carregarPmcDoWorker(){let local=pmc;try{let r=await fetch(PMC_API_URL,{cache:'no-store'});if(!r.ok)throw new Error(`HTTP ${r.status}`);let remoto=await r.json();if(Object.keys(remoto).length){pmc=remoto;localStorage.setItem(PMC_KEY,JSON.stringify(pmc));render();$('msg').textContent=`${Object.keys(pmc).length.toLocaleString('pt-BR')} SKUs PMC carregados do Worker.`}else if(Object.keys(local).length){await salvarPmcNoWorker(local);$('msg').textContent=`${Object.keys(local).length.toLocaleString('pt-BR')} SKUs PMC enviados ao Worker.`}}catch(e){$('msg').textContent='Worker de PMC indisponível; usando o cache local. '+e.message}}
-async function loadPMC(){let f=$('pf').files[0];if(!f)return;$('msg').textContent='Importando PMC e salvando no Worker...';try{let rows=await readFile(f),mapa={};rows.forEach(r=>{let sk=Object.keys(r).find(k=>/sku|c[oó]digo/i.test(k)),pk=Object.keys(r).find(k=>k.trim().toUpperCase()==='PMC');if(sk)mapa[cleanSku(r[sk])]=num(r[pk])});let resposta=await salvarPmcNoWorker(mapa);pmc=mapa;localStorage.setItem(PMC_KEY,JSON.stringify(pmc));$('msg').textContent=`${Number(resposta.totalSkus||Object.keys(pmc).length).toLocaleString('pt-BR')} SKUs PMC salvos no Worker.`;render()}catch(e){$('msg').textContent='Não foi possível salvar os PMCs no Worker: '+e.message}}
-function exportPMC(){let rows=['SKU,PMC',...Object.keys(pmc).sort().map(k=>`${k},${pmc[k]??''}`)],a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8'}));a.download='sku-pmc.csv';a.click()}
-(function(){const originalFetch=window.fetch.bind(window);window.fetch=function(input,init){try{let u=new URL(typeof input==='string'?input:input.url);if(u.pathname==='/orders-dashboard'){u.searchParams.set('server_cache','1');let d=new Date(),p=x=>String(x).padStart(2,'0'),today=`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`,currentStart=today.slice(0,7)+'-01';if(u.searchParams.get('start')===currentStart&&u.searchParams.get('end')===today)u.searchParams.set('refresh','1');return originalFetch(u.toString(),init)}}catch{}return originalFetch(input,init)}})();
-function apiDate(v){let s=String(v||'');if(/^\d{4}-\d{2}-\d{2}/.test(s)){let z=/Z$/.test(s)||/[+-]\d{2}:?\d{2}$/.test(s);return s.slice(0,19)+(z?'Z':'')}let m=s.match(/(\d{2})[-/](\d{2})[-/](\d{4})(?:\s+(\d{2}:\d{2}:\d{2}))?/);return m?`${m[3]}-${m[2]}-${m[1]}T${m[4]||'00:00:00'}`:''}
- function normalizeOrders(json){let rows=Array.isArray(json)?json:(json.result||json.orders||json.data||[]),seen=new Set();return rows.map((x,n)=>x.Order||x).filter(q=>{let status=String(q.status||'').trim().toLowerCase();return status!=='canceled'&&status!=='cancelled'&&status!=='pending'}).filter((q,n)=>{let id=orderOf(q,n);if(seen.has(id))return false;seen.add(id);return true}).flatMap((q,n)=>{let s=Array.isArray(q.shipments)?q.shipments[0]:q.shipments,items=q.items||s?.items||[],date=apiDate(q.created||s?.created||q['Criado em']||q.created_at);return items.map(i=>{let z=cleanSku(i.variation?.sku||i.sku||i.SKU),qty=num(itemValue(i,'quantity')),price=num(itemValue(i,'price')??i.total);return z?{order:orderOf(q,n),date,platform:platformOf(q),sku:z,qty,sale:price*qty}:null}).filter(Boolean)})}
-function formatarDataBrasil(valor){let d=new Date(valor);if(!Number.isNaN(d.getTime()))return new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(d);let m=String(valor||'').match(/^(\d{4})-(\d{2})-(\d{2})(?:T|\s)(\d{2}:\d{2}:\d{2})/);return m?`${m[3]}/${m[2]}/${m[1]} ${m[4]}`:String(valor||'')}
-const renderOriginal=render;render=function(){renderOriginal();document.querySelectorAll('.order>div').forEach(el=>{el.innerHTML=el.innerHTML.replace(/\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+Z)?/g,x=>formatarDataBrasil(x))})};
-
-// Sincronização incremental: a carga completa ocorre uma vez; depois consultamos
-// somente pedidos criados desde o último ponto salvo no cache local.
-async function loadApi(force=false,requestedMode='auto'){
-  if(loading)return;
-  loading=true;
-  let pageNo=Number(dashboardMeta().pageNo||0),rawCount=0,total=0,next='',rawSeen=new Set(),meta=dashboardMeta(),mode='full',start='2000-01-01',end=dashboardToday(),since='';
-  try{
-    let cached=await dashboardReadCache();
-    if(cached.length){data=cached;fillFilters();render()}
-    let today=dashboardToday(),currentStart=today.slice(0,7)+'-01',lastSync=Date.parse(meta.lastSyncAt||meta.lastSync||'');
-    if(!force&&meta.full&&!meta.inProgress&&data.length&&Number.isFinite(lastSync)&&Date.now()-lastSync<5*60*1000){
-      $('status').textContent=`${data.length.toLocaleString('pt-BR')} itens no cache — sincronização recente mantida; nenhuma consulta necessária`;
-      loading=false;return;
-    }
-    let resumable=Boolean(requestedMode==='auto'&&meta.inProgress&&meta.next!==undefined&&meta.start&&meta.end&&(meta.mode==='full'||meta.mode==='incremental'));
-    if(!resumable)pageNo=0;
-    if(requestedMode==='full'){
-      mode='full';start='2000-01-01';end=today;since='';next='';
-    }else if(requestedMode==='day'){
-      mode='day';start=today;end=today;
-      let checkpoint=meta.lastDaySyncAt||'';
-      if(checkpoint){let t=Date.parse(checkpoint);since=Number.isFinite(t)?new Date(Math.max(0,t-1000)).toISOString():checkpoint}
-    }else if(resumable){
-      mode=meta.mode;start=meta.start;end=meta.end;since=meta.since||'';next=String(meta.next||'');
-    }else if(meta.full&&data.length){
-      mode='incremental';start=currentStart;end=today;
-      let checkpoint=meta.lastSyncAt||meta.lastSync||'';
-      if(checkpoint){
-        let t=Date.parse(checkpoint);
-        since=Number.isFinite(t)?new Date(Math.max(0,t-1000)).toISOString():`${checkpoint}T00:00:00.000Z`;
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Painel de Marketplaces</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+      * {
+        box-sizing: border-box;
       }
-    }
-    let retomando=Boolean(resumable&&mode==='full');
-    $('status').innerHTML=`<span class="loading-dot"></span>${retomando?'Retomando carga histórica':mode==='day'?'Atualizando pedidos de hoje':'Carregando todas as vendas'}...`;
-    do{
-      pageNo++;
-      let url=new URL(API_URL);
-      url.searchParams.set('start',start);url.searchParams.set('end',end);url.searchParams.set('limit','100');
-      if(since)url.searchParams.set('since',since);
-      if(next)url.searchParams.set('next',next);
-      $('status').innerHTML=`<span class="loading-dot"></span>${retomando?'Retomando carga histórica':mode==='full'?'Carregando todas as vendas':mode==='day'?'Atualizando pedidos de hoje':'Verificando novos pedidos'}: ${rawCount.toLocaleString('pt-BR')}${total?' de '+total.toLocaleString('pt-BR'):''} — página ${pageNo}`;
-      let response=await fetch(url.toString()),body=await response.text();
-      if(!response.ok)throw new Error(`HTTP ${response.status}: ${body.slice(0,240)}`);
-      let payload=JSON.parse(body),part=payload.result||payload.orders||payload.data||[];
-      if(!Array.isArray(part)||!part.length)break;
-      let key=dashboardPageKey(part);
-      if(rawSeen.has(key))throw new Error(`A API repetiu a página ${pageNo}; cursor enviado: ${next||'(primeira página)'}`);
-      rawSeen.add(key);rawCount+=part.length;total=Number(payload.total??total);
-      let fresh=normalizeOrders({result:part});
-      data=dashboardMerge(data,fresh);
-      await dashboardWriteCache(data);
-      let cursor=dashboardCursor(payload,part);
-      if(!cursor||cursor===next){
-        if(part.length>=100&&!cursor)throw new Error('A API retornou 100 pedidos sem cursor para a próxima página');
-        break;
+      body {
+        font: 14px Arial;
+        margin: 0;
+        background: #e7eaf0;
+        color: #102241;
       }
-      next=cursor;
-      dashboardSaveMeta({full:mode==='full'?false:Boolean(meta.full),inProgress:true,mode,start,end,since,next,total,rawCount,pageNo});
-      if(rawCount>200000)throw new Error('Limite de segurança de 200.000 pedidos atingido');
-    }while(true);
-    let completeFull=mode==='full'||Boolean(meta.full);
-    dashboardSaveMeta({full:completeFull,inProgress:false,mode,start,end,since,lastSyncAt:new Date().toISOString(),lastDaySyncAt:mode==='day'?new Date().toISOString():(meta.lastDaySyncAt||''),total,rawCount,pageNo});
-    fillFilters();page=1;render();
-    $('status').textContent=mode==='full'
-      ?`${data.length.toLocaleString('pt-BR')} itens salvos no cache — carga completa concluída (${rawCount.toLocaleString('pt-BR')} pedidos consultados)`
-      :mode==='day'
-      ?`${data.length.toLocaleString('pt-BR')} itens no cache — pedidos de hoje atualizados (${rawCount.toLocaleString('pt-BR')} consultados)`
-      :(rawCount?`${data.length.toLocaleString('pt-BR')} itens no cache — ${rawCount.toLocaleString('pt-BR')} pedidos novos verificados`:'Nenhum pedido novo; cache histórico mantido');
-  }catch(e){
-    await dashboardWriteCache(data).catch(()=>{});
-    dashboardSaveMeta({...meta,full:meta.full||false,inProgress:true,mode,start,end,since,next,total,rawCount,pageNo});
-    fillFilters();render();
-    $('status').textContent=`${data.length.toLocaleString('pt-BR')} itens mantidos no cache; falha após a página ${pageNo||0}`;
-    $('msg').textContent='Detalhe da API: '+e.message;
-  }finally{loading=false}
-}
+      header {
+        background: #0b2c58;
+        color: #fff;
+        padding: 22px;
+      }
+      header h2 {
+        margin: 0 0 8px;
+      }
+      #status {
+        display: block;
+      }
+      .loading-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border: 2px solid #fff;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-right: 6px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      main {
+        max-width: 1800px;
+        margin: 22px auto;
+        padding: 0 20px;
+      }
+      .tabs button,
+      .primary,
+      button {
+        padding: 10px 15px;
+        border: 0;
+        border-radius: 8px;
+        margin-right: 6px;
+        cursor: pointer;
+      }
+      .primary,
+      .active {
+        background: #356ae6;
+        color: #fff;
+      }
+      .card {
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 18px;
+        margin: 14px 0;
+        box-shadow: 0 3px 14px rgba(0, 0, 0, 0.192);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+      }
+      .metric {
+        font-size: 25px;
+        font-weight: bold;
+        margin-top: 8px;
+      }
+      .metric-label {
+        color: #68758a;
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: end;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 170px;
+      }
+      .field input,
+      .field select {
+        padding: 9px;
+        border: 1px solid #d6ddeb;
+        border-radius: 7px;
+        background: #fff;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      td,
+      th {
+        padding: 9px;
+        border-bottom: 1px solid #edf0f5;
+        text-align: left;
+      }
+      .muted {
+        color: #748096;
+      }
+      .hidden {
+        display: none;
+      }
+      .orders {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 16px;
+      }
+      .order {
+        background: #fbfcff;
+        border: 1px solid #dfe6f2;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 3px 14px rgba(0, 0, 0, 0.226);
+      }
+      .order b,
+      .order-id {
+        color: #245de0;
+      }
+      .order h4 {
+        margin: 0;
+      }
+      .order-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 12px;
+      }
+      .order-meta {
+        color: #68758a;
+        line-height: 1.5;
+        text-align: right;
+      }
+      .order-metrics {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        margin: 12px 0;
+      }
+      .order-metric {
+        background: #fff;
+        border: 1px solid #e6ebf4;
+        border-radius: 8px;
+        padding: 9px;
+      }
+      .order-metric strong {
+        display: block;
+        margin-top: 4px;
+      }
+      .order-lines {
+        font-size: 12px;
+        margin: 10px 0;
+      }
+      .order-lines td,
+      .order-lines th {
+        padding: 7px 4px;
+      }
+      .order-lines th {
+        color: #68758a;
+        font-weight: normal;
+      }
+      .order-total {
+        border-top: 1px solid #aeb8ca;
+        padding-top: 12px;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px 12px;
+      }
+      .order-total span {
+        color: #68758a;
+      }
+      .order-total strong {
+        display: block;
+        color: #172033;
+        margin-top: 3px;
+      }
+      .order-total span:last-child strong {
+        color: #245de0;
+      }
+      .pager {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 12px;
+        margin-top: 18px;
+      }
+      .pager button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .small {
+        font-size: 12px;
+      }
+      @media (max-width: 800px) {
+        .grid {
+          grid-template-columns: 2fr 2fr;
+        }
+        .order {
+          width: auto;
+        }
+        .order-meta {
+          text-align: left;
+        }
+        .order-top {
+          display: block;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h2>Gerenciamento dos Pedidos</h2>
+      <span id="status">Nenhuma base carregada</span>
+    </header>
+    <main>
+      <nav class="tabs">
+        <button class="active" onclick="tab('dash', this)">Vendas</button
+        ><button id="costBtn" disabled onclick="tab('costs', this)">
+          Custos</button
+        ><button onclick="tab('up', this)">Importar bases</button>
+      </nav>
+      <section id="dash">
+        <div class="card row">
+          <div class="field">
+            <label>Marketplace</label
+            ><select id="plat">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Mês</label
+            ><select id="month">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Ano</label
+            ><select id="year">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Data inicial</label><input id="from" type="date" />
+          </div>
+          <div class="field">
+            <label>Data final</label><input id="to" type="date" />
+          </div>
+          <button class="primary" onclick="applyFilters()">
+            Aplicar filtros</button
+          ><button onclick="clearFilters()">Limpar</button
+          ><button onclick="atualizarPedidosDoDia()">
+            Atualizar pedidos de hoje</button
+          ><button class="primary" onclick="atualizarTodosPedidos()">
+            Atualizar todos os pedidos
+          </button>
+        </div>
+        <div class="grid">
+          <div class="card">
+            <div class="metric-label">Vendas</div>
+            <div class="metric" id="sale">R$ 0,00</div>
+          </div>
+          <div class="card">
+            <div class="metric-label">Custo PMC</div>
+            <div class="metric" id="cost">R$ 0,00</div>
+          </div>
+          <div class="card">
+            <div class="metric-label">Custos da plataforma</div>
+            <div class="metric" id="fee">R$ 0,00</div>
+          </div>
+          <div class="card">
+            <div class="metric-label">Lucro líquido</div>
+            <div class="metric" id="profit">R$ 0,00</div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Resumo por plataforma</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Plataforma</th>
+                <th>Pedidos</th>
+                <th>Vendas</th>
+                <th>PMC</th>
+                <th>Custos</th>
+                <th>Lucro líquido</th>
+                <th>Margem</th>
+              </tr>
+            </thead>
+            <tbody id="summary"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h3>Lucro real por pedido</h3>
+          <p class="muted small" id="orderCount"></p>
+          <div id="orders" class="orders"></div>
+          <div id="pager" class="pager"></div>
+        </div>
+      </section>
+      <section id="costs" class="hidden">
+        <div class="card">
+          <h2>Custos por plataforma</h2>
+          <div class="row">
+            <div class="field">
+              <label>Marketplace</label
+              ><select id="cp"></select>
+            </div>
+            <div class="field">
+              <label>Nome do custo</label
+              ><input id="cn" placeholder="Comissão, frete..." />
+            </div>
+            <div class="field">
+              <label>Taxa (%)</label><input id="cr" type="number" step=".01" />
+            </div>
+            <div class="field">
+              <label>Fixo/pedido</label
+              ><input id="cf" type="number" step=".01" />
+            </div>
+            <button class="primary" onclick="saveCost()">Salvar</button
+            ><button id="cancelCost" class="hidden" onclick="cancelCostEdit()">
+              Cancelar
+            </button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Marketplace</th>
+                <th>Nome</th>
+                <th>Taxa</th>
+                <th>Fixo/pedido</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="costRows"></tbody>
+          </table>
+        </div>
+      </section>
+      <section id="up" class="hidden">
+        <div class="card">
+          <h2>Gerenciar SKUs e PMCs</h2>
+          <p class="muted">
+            A venda vem da API. Os PMCs ficam salvos no Worker e compartilhados
+            entre os navegadores.
+          </p>
+          <div class="row">
+            <div class="field">
+              <label>PMC</label
+              ><input id="pf" type="file" accept=".xlsx,.xls,.csv" />
+            </div>
+            <button class="primary" onclick="loadPMC()">Importar PMC</button
+            ><button onclick="exportPMC()">Exportar SKU/PMC</button>
+          </div>
+          <p id="msg" class="muted"></p>
+        </div>
+        <div class="card">
+          <h3>SKUs sem PMC</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="missingPMC"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <script>
+      const API_URL =
+          "https://pluggto-proxy.guilhermepaulino-wapssolutions.workers.dev/orders-dashboard",
+        CACHE_KEY = "painel-orders-cache-v11",
+        PMC_KEY = "painel-pmc-v5";
+      let data = [],
+        pmc = JSON.parse(localStorage.getItem(PMC_KEY) || "{}"),
+        costs = JSON.parse(localStorage.getItem("costs") || "{}"),
+        page = 1,
+        editingCost = null,
+        loading = false;
+      const $ = (id) => document.getElementById(id),
+        money = (x) =>
+          (Number(x) || 0).toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }),
+        num = (x) => {
+          if (typeof x === "number") return x;
+          let t = String(x ?? "")
+            .replace(/R\$\s?/g, "")
+            .trim();
+          if (t.includes(",") && t.includes("."))
+            t = t.replace(/\./g, "").replace(",", ".");
+          else if (t.includes(",")) t = t.replace(",", ".");
+          return parseFloat(t) || 0;
+        },
+        cleanSku = (x) =>
+          String(x ?? "")
+            .replace(/^\*/, "")
+            .replace(/-/g, "")
+            .trim()
+            .toUpperCase(),
+        esc = (x) =>
+          String(x ?? "").replace(
+            /[&<>"']/g,
+            (c) =>
+              ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+              })[c],
+          );
+      function apiDate(v) {
+        let s = String(v || "");
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 19);
+        let m = s.match(
+          /(\d{2})[-/](\d{2})[-/](\d{4})(?:\s+(\d{2}:\d{2}:\d{2}))?/,
+        );
+        return m ? `${m[3]}-${m[2]}-${m[1]}T${m[4] || "00:00:00"}` : "";
+      }
+      function tab(id, b) {
+        document
+          .querySelectorAll("section")
+          .forEach((x) => x.classList.add("hidden"));
+        $(id).classList.remove("hidden");
+        document
+          .querySelectorAll(".tabs button")
+          .forEach((x) => x.classList.remove("active"));
+        b.classList.add("active");
+      }
+      function platformOf(q) {
+        let s = Array.isArray(q.shipments) ? q.shipments[0] : q.shipments;
+        return (
+          q.channel ||
+          s?.channel ||
+          q.Canal ||
+          q.marketplace ||
+          "Sem plataforma"
+        );
+      }
+      function orderOf(q, n) {
+        let s = Array.isArray(q.shipments) ? q.shipments[0] : q.shipments;
+        return (
+          String(
+            q.original_id ||
+              s?.original_id ||
+              q.external ||
+              s?.external ||
+              q.id ||
+              q.order_id ||
+              `Pedido-${n}`,
+          )
+            .split(",")[0]
+            .trim() || `Pedido-${n}`
+        );
+      }
+      function itemValue(i, name) {
+        let a = i.attributes;
+        if (Array.isArray(a))
+          a = a.find((x) => x && (x.name || x.key) === name) || {};
+        return a?.[name] ?? i[name] ?? i[name === "quantity" ? "qty" : "total"];
+      }
+      function normalizeOrders(json) {
+        let rows = Array.isArray(json)
+            ? json
+            : json.result || json.orders || json.data || [],
+          seen = new Set();
+        return rows
+          .map((x, n) => x.Order || x)
+          .filter((q, n) => {
+            let id = orderOf(q, n);
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          })
+          .flatMap((q, n) => {
+            let s = Array.isArray(q.shipments) ? q.shipments[0] : q.shipments,
+              items = q.items || s?.items || [],
+              date = apiDate(
+                q.created || s?.created || q["Criado em"] || q.created_at,
+              );
+            return items
+              .map((i) => {
+                let z = cleanSku(i.variation?.sku || i.sku || i.SKU),
+                  qty = num(itemValue(i, "quantity")),
+                  price = num(itemValue(i, "price") ?? i.total);
+                return z
+                  ? {
+                      order: orderOf(q, n),
+                      date,
+                      platform: platformOf(q),
+                      sku: z,
+                      qty,
+                      sale: price * qty,
+                    }
+                  : null;
+              })
+              .filter(Boolean);
+          });
+      }
+      function fillFilters() {
+        let p = [...new Set(data.map((x) => x.platform).filter(Boolean))].sort(
+            (a, b) => a.localeCompare(b),
+          ),
+          y = [
+            ...new Set(data.map((x) => x.date.slice(0, 4)).filter(Boolean)),
+          ].sort(),
+          oldP = $("plat").value,
+          oldY = $("year").value;
+        $("plat").innerHTML =
+          '<option value="">Todos</option>' +
+          p.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+        $("year").innerHTML =
+          '<option value="">Todos</option>' +
+          y.map((x) => `<option value="${x}">${x}</option>`).join("");
+        if (p.includes(oldP)) $("plat").value = oldP;
+        if (y.includes(oldY)) $("year").value = oldY;
+        $("cp").innerHTML =
+          p
+            .map((x) => `<option value="${esc(x)}">${esc(x)}</option>`)
+            .join("") ||
+          '<option value="">Nenhuma plataforma carregada</option>';
+      }
+      function platformCost(p) {
+        return Object.values(costs)
+          .filter((x) => x.platform === p)
+          .reduce(
+            (a, x) => ({ rate: a.rate + num(x.rate), fix: a.fix + num(x.fix) }),
+            { rate: 0, fix: 0 },
+          );
+      }
+      function filtered() {
+        let m = $("month").value,
+          y = $("year").value,
+          st = $("from").value,
+          en = $("to").value,
+          p = $("plat").value;
+        return data.filter((x) => {
+          let d = x.date.slice(0, 10);
+          return (
+            (!p || x.platform === p) &&
+            (!m || d.slice(5, 7) === String(m).padStart(2, "0")) &&
+            (!y || d.slice(0, 4) === y) &&
+            (!st || d >= st) &&
+            (!en || d <= en)
+          );
+        });
+      }
+      function groupOrders(lines) {
+        let g = {};
+        lines.forEach((x) => (g[x.order] ??= []).push(x));
+        return Object.values(g)
+          .map((v) => {
+            v.sort((a, b) => a.sku.localeCompare(b.sku));
+            let sale = v.reduce((s, x) => s + x.sale, 0),
+              pm = v.reduce((s, x) => s + num(pmc[x.sku]) * x.qty, 0),
+              c = platformCost(v[0].platform),
+              fee = (sale * c.rate) / 100 + c.fix,
+              rows = v.map((x) => {
+                let productPmc = num(pmc[x.sku]) * x.qty,
+                  share = sale ? x.sale / sale : 1 / v.length,
+                  productFee = (x.sale * c.rate) / 100 + c.fix * share;
+                return {
+                  ...x,
+                  productPmc,
+                  productFee,
+                  profit: x.sale - productPmc - productFee,
+                };
+              });
+            return {
+              order: v[0].order,
+              date: v[0].date,
+              platform: v[0].platform,
+              lines: rows,
+              sale,
+              pmc: pm,
+              fee,
+              profit: sale - pm - fee,
+            };
+          })
+          .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      }
+      function render() {
+        let orders = groupOrders(filtered()),
+          S = orders.reduce((s, x) => s + x.sale, 0),
+          M = orders.reduce((s, x) => s + x.pmc, 0),
+          F = orders.reduce((s, x) => s + x.fee, 0);
+        $("sale").textContent = money(S);
+        $("cost").textContent = money(M);
+        $("fee").textContent = money(F);
+        $("profit").textContent = money(S - M - F);
+        let by = {};
+        orders.forEach((o) => (by[o.platform] ??= []).push(o));
+        $("summary").innerHTML =
+          Object.entries(by)
+            .map(([p, v]) => {
+              let s = v.reduce((a, x) => a + x.sale, 0),
+                f = v.reduce((a, x) => a + x.profit, 0);
+              return `<tr><td>${esc(p)}</td><td>${v.length}</td><td>${money(s)}</td><td>${money(f)}</td><td>${s ? ((f / s) * 100).toFixed(1) : "0.0"}%</td></tr>`;
+            })
+            .join("") ||
+          '<tr><td colspan="5">Nenhum pedido encontrado.</td></tr>';
+        $("orderCount").textContent =
+          `${orders.length.toLocaleString("pt-BR")} pedido(s) encontrado(s)`;
+        let totalPages = Math.max(1, Math.ceil(orders.length / 20));
+        if (page > totalPages) page = totalPages;
+        let visible = orders.slice((page - 1) * 20, page * 20);
+        $("orders").innerHTML =
+          visible
+            .map(
+              (o) =>
+                `<article class="order"><h4 class="order-id">${esc(o.order)}</h4><div>${esc(o.platform)}<br>${esc(o.date.replace("T", " "))}</div><table class="order-lines"><thead><tr><th>SKU</th><th>Qtd</th><th>Líquido</th></tr></thead><tbody>${o.lines.map((x) => `<tr><td>${esc(x.sku)}<br><span class="small">Venda ${money(x.sale)} · PMC ${money(x.productPmc)}</span></td><td>${x.qty}</td><td>${money(x.profit)}</td></tr>`).join("")}</tbody></table><div class="order-total">Venda: ${money(o.sale)}<br>PMC: ${money(o.pmc)}<br>Custos: ${money(o.fee)}<br><b>Lucro líquido: ${money(o.profit)}</b><br>Margem: ${o.sale ? ((o.profit / o.sale) * 100).toFixed(1) : "0.0"}%</div></article>`,
+            )
+            .join("") || "<p>Nenhum pedido encontrado.</p>";
+        $("pager").innerHTML =
+          totalPages > 1
+            ? `<button onclick="changePage(-1)" ${page === 1 ? "disabled" : ""}>Anterior</button><span>Página ${page} de ${totalPages}</span><button onclick="changePage(1)" ${page === totalPages ? "disabled" : ""}>Próxima</button>`
+            : "";
+        renderMissing();
+      }
+      function changePage(n) {
+        page += n;
+        render();
+        window.scrollTo({
+          top: $("orders").offsetTop - 20,
+          behavior: "smooth",
+        });
+      }
+      function applyFilters() {
+        page = 1;
+        render();
+      }
+      function clearFilters() {
+        ["plat", "month", "year", "from", "to"].forEach(
+          (id) => ($(id).value = ""),
+        );
+        page = 1;
+        render();
+      }
+      function renderMissing() {
+        let missing = [
+          ...new Set(data.filter((x) => !num(pmc[x.sku])).map((x) => x.sku)),
+        ].sort();
+        $("missingPMC").innerHTML =
+          missing
+            .map(
+              (x) => `<tr><td>${esc(x)}</td><td>PMC não cadastrado</td></tr>`,
+            )
+            .join("") || '<tr><td colspan="2">Nenhum SKU sem PMC.</td></tr>';
+      }
+      function drawCosts() {
+        $("costRows").innerHTML =
+          Object.entries(costs)
+            .map(
+              ([k, x]) =>
+                `<tr><td>${esc(x.platform)}</td><td>${esc(x.name)}</td><td>${num(x.rate)}%</td><td>${money(x.fix)}</td><td><button onclick="editCost('${esc(k)}')">Editar</button><button onclick="deleteCost('${esc(k)}')">Excluir</button></td></tr>`,
+            )
+            .join("") ||
+          '<tr><td colspan="5">Nenhum custo cadastrado.</td></tr>';
+      }
+      function saveCost() {
+        let p = $("cp").value,
+          n = $("cn").value.trim() || "Custo",
+          k = editingCost || p + "|" + n;
+        costs[k] = {
+          platform: p,
+          name: n,
+          rate: num($("cr").value),
+          fix: num($("cf").value),
+        };
+        localStorage.setItem("costs", JSON.stringify(costs));
+        editingCost = null;
+        $("cancelCost").classList.add("hidden");
+        $("cn").value = "";
+        $("cr").value = "";
+        $("cf").value = "";
+        drawCosts();
+        render();
+      }
+      function editCost(k) {
+        let x = costs[k];
+        if (!x) return;
+        editingCost = k;
+        $("cp").value = x.platform;
+        $("cn").value = x.name;
+        $("cr").value = x.rate;
+        $("cf").value = x.fix;
+        $("cancelCost").classList.remove("hidden");
+      }
+      function cancelCostEdit() {
+        editingCost = null;
+        $("cancelCost").classList.add("hidden");
+        $("cn").value = "";
+        $("cr").value = "";
+        $("cf").value = "";
+      }
+      function deleteCost(k) {
+        if (confirm("Excluir este custo?")) {
+          delete costs[k];
+          localStorage.setItem("costs", JSON.stringify(costs));
+          drawCosts();
+          render();
+        }
+      }
+      function readFile(f) {
+        return f.arrayBuffer().then((b) => {
+          let w = XLSX.read(b, { type: "array" });
+          return XLSX.utils.sheet_to_json(w.Sheets[w.SheetNames[0]], {
+            defval: "",
+          });
+        });
+      }
+      async function loadPMC() {
+        let f = $("pf").files[0];
+        if (!f) return;
+        $("msg").textContent = "Importando PMC...";
+        let rows = await readFile(f);
+        pmc = {};
+        rows.forEach((r) => {
+          let sk = Object.keys(r).find((k) => /sku|c[oó]digo/i.test(k)),
+            pk = Object.keys(r).find((k) => k.trim().toUpperCase() === "PMC");
+          if (sk) pmc[cleanSku(r[sk])] = num(r[pk]);
+        });
+        localStorage.setItem(PMC_KEY, JSON.stringify(pmc));
+        $("msg").textContent =
+          `${Object.keys(pmc).length.toLocaleString("pt-BR")} SKUs PMC importados.`;
+        render();
+      }
+      function exportPMC() {
+        let rows = [
+            "SKU,PMC",
+            ...Object.keys(pmc)
+              .sort()
+              .map((k) => `${k},${pmc[k] ?? ""}`),
+          ],
+          a = document.createElement("a");
+        a.href = URL.createObjectURL(
+          new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" }),
+        );
+        a.download = "sku-pmc.csv";
+        a.click();
+      }
+      async function loadApi(force = false) {
+        if (loading) return;
+        let cached = localStorage.getItem(CACHE_KEY);
+        if (cached && !force) {
+          try {
+            data = JSON.parse(cached);
+            fillFilters();
+            render();
+            $("status").textContent =
+              `${data.length.toLocaleString("pt-BR")} itens carregados do cache local — filtros locais ativos`;
+            return;
+          } catch {
+            localStorage.removeItem(CACHE_KEY);
+          }
+        }
+        loading = true;
+        let end = new Date().toISOString().slice(0, 10),
+          raw = [],
+          next = "",
+          total = 0,
+          seenPages = new Set();
+        try {
+          do {
+            let url =
+              API_URL +
+              "?start=2020-01-01&end=" +
+              end +
+              "&limit=100" +
+              (next ? "&next=" + encodeURIComponent(next) : "");
+            $("status").innerHTML =
+              '<span class="loading-dot"></span>Carregando pedidos: ' +
+              raw.length.toLocaleString("pt-BR") +
+              (total ? " de " + total.toLocaleString("pt-BR") : "") +
+              " — datas antigas serão salvas no cache";
+            let r = await fetch(url);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            let j = await r.json(),
+              part = j.result || j.orders || j.data || [];
+            if (!Array.isArray(part) || !part.length) break;
+            let last = part[part.length - 1]?.Order || part[part.length - 1],
+              lastId = last?.id || last?.order_id || "",
+              signature = part.map((x) => (x.Order || x).id || "").join("|");
+            if (seenPages.has(signature)) break;
+            seenPages.add(signature);
+            raw.push(...part);
+            total = Number(j.total || total);
+            if (part.length < 100 || !lastId || lastId === next) break;
+            next = String(lastId);
+            if (raw.length > 100000) break;
+          } while (true);
+          let received = normalizeOrders({ result: raw });
+          if (!received.length) throw new Error("A API retornou zero itens");
+          data = received;
+          localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+          fillFilters();
+          page = 1;
+          render();
+          $("status").textContent =
+            `${received.length.toLocaleString("pt-BR")} itens carregados e salvos no cache local (${[...new Set(raw.map(((x) => x.Order || x).id))].length.toLocaleString("pt-BR")} pedidos únicos)`;
+        } catch (e) {
+          let partial = raw.length ? normalizeOrders({ result: raw }) : [];
+          if (partial.length) {
+            data = partial;
+            localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+            fillFilters();
+            render();
+            $("status").textContent =
+              `${partial.length.toLocaleString("pt-BR")} itens salvos no cache; a API interrompeu a próxima página (${total.toLocaleString("pt-BR")} pedidos informados)`;
+            $("msg").textContent =
+              "A primeira página foi preservada sem duplicação. O proxy precisa repassar o parâmetro next para carregar as páginas restantes.";
+          } else if (data.length) {
+            $("status").textContent =
+              `${data.length.toLocaleString("pt-BR")} itens no cache — API indisponível`;
+            $("msg").textContent =
+              "Não foi possível atualizar agora: " + e.message;
+          } else {
+            $("status").textContent = "Falha ao carregar a API: " + e.message;
+            $("msg").textContent =
+              "Verifique a conexão e tente recarregar a página.";
+          }
+        } finally {
+          loading = false;
+        }
+      }
+      async function iniciarCacheSemApi() {
+        try {
+          let cached = await dashboardReadCache();
+          if (cached.length) {
+            data = cached;
+            fillFilters();
+            render();
+            $("status").textContent =
+              `${data.length.toLocaleString("pt-BR")} itens carregados do cache local — nenhuma consulta feita ao abrir a página`;
+          } else {
+            $("status").textContent =
+              'Nenhum pedido no cache. Use "Atualizar todos os pedidos" para fazer a primeira carga.';
+          }
+        } catch (e) {
+          $("status").textContent =
+            'Cache local indisponível. Use "Atualizar todos os pedidos" para carregar os pedidos.';
+        }
+      }
+      function atualizarPedidosDoDia() {
+        if (loading) return Promise.resolve();
+        return loadApi(true, "day");
+      }
+      async function atualizarTodosPedidos() {
+        if (loading) return;
+        let hoje = dashboardToday(),
+          meta = dashboardMeta();
+        dashboardSaveMeta({
+          ...meta,
+          full: false,
+          inProgress: false,
+          mode: "full",
+          start: "2000-01-01",
+          end: hoje,
+          since: "",
+          next: "",
+          lastSyncAt: "",
+        });
+        return loadApi(true, "full");
+      }
+      function iniciarAtualizacaoAutomatica() {
+        setInterval(
+          () => {
+            if (!loading) atualizarPedidosDoDia();
+          },
+          5 * 60 * 1000,
+        );
+      }
+      function init() {
+        for (let i = 1; i <= 12; i++)
+          $("month").insertAdjacentHTML(
+            "beforeend",
+            `<option value="${i}">${i}</option>`,
+          );
+        ["plat", "month", "year", "from", "to"].forEach((id) =>
+          $(id).addEventListener("change", () => {
+            page = 1;
+            render();
+          }),
+        );
+        drawCosts();
+        $("costBtn").disabled = false;
+        render();
+        iniciarCacheSemApi();
+        iniciarAtualizacaoAutomatica();
+      }
+      init();
+      function dashboardPagingId(row) {
+        let q = row?.Order || row?.order || row || {},
+          s = Array.isArray(q.shipments) ? q.shipments[0] : q.shipments;
+        return String(
+          q.id ??
+            q.pluggto_id ??
+            q.pluggId ??
+            q.order_id ??
+            q._id ??
+            s?.id ??
+            "",
+        ).trim();
+      }
+      function dashboardCursor(payload, rows) {
+        let v =
+          payload?.next ??
+          payload?.next_page ??
+          payload?.nextPage ??
+          payload?.paging?.next ??
+          payload?.pagination?.next ??
+          payload?.meta?.next;
+        if (v && typeof v === "object")
+          v = v.id ?? v.cursor ?? v.next ?? v.value;
+        if (typeof v === "string" && v.includes("?")) {
+          try {
+            v = new URL(v).searchParams.get("next") || v;
+          } catch {}
+        }
+        return String(
+          v || dashboardPagingId(rows[rows.length - 1]) || "",
+        ).trim();
+      }
+      function dashboardPageKey(rows) {
+        return rows
+          .map(
+            (row, i) =>
+              dashboardPagingId(row) ||
+              JSON.stringify(row).slice(0, 160) ||
+              String(i),
+          )
+          .join("|");
+      }
+      async function loadApi(force = false) {
+        if (loading) return;
+        let cached = localStorage.getItem(CACHE_KEY);
+        if (cached && !force) {
+          try {
+            data = JSON.parse(cached);
+            fillFilters();
+            render();
+            $("status").textContent =
+              `${data.length.toLocaleString("pt-BR")} itens carregados do cache local — filtros locais ativos`;
+            return;
+          } catch {
+            localStorage.removeItem(CACHE_KEY);
+          }
+        }
+        loading = true;
+        let end = new Date().toISOString().slice(0, 10),
+          raw = [],
+          next = "",
+          total = 0,
+          pageNo = 0,
+          seenPages = new Set();
+        try {
+          do {
+            pageNo++;
+            let url = new URL(API_URL);
+            url.searchParams.set("start", "2020-01-01");
+            url.searchParams.set("end", end);
+            url.searchParams.set("limit", "100");
+            if (next) url.searchParams.set("next", next);
+            $("status").innerHTML =
+              '<span class="loading-dot"></span>Carregando pedidos: ' +
+              raw.length.toLocaleString("pt-BR") +
+              (total ? " de " + total.toLocaleString("pt-BR") : "") +
+              " — página " +
+              pageNo +
+              " — datas antigas serão salvas no cache";
+            let r = await fetch(url.toString());
+            let body = await r.text();
+            if (!r.ok)
+              throw new Error(`HTTP ${r.status}: ${body.slice(0, 240)}`);
+            let j = JSON.parse(body),
+              part = j.result || j.orders || j.data || [];
+            if (!Array.isArray(part) || !part.length) break;
+            let key = dashboardPageKey(part);
+            if (seenPages.has(key))
+              throw new Error(
+                `A API repetiu a página ${pageNo}; cursor enviado: ${next || "(primeira página)"}`,
+              );
+            seenPages.add(key);
+            raw.push(...part);
+            total = Number(j.total ?? total);
+            let cursor = dashboardCursor(j, part);
+            if (!cursor || cursor === next) {
+              if (part.length >= 100 && !cursor)
+                throw new Error(
+                  `A API retornou ${part.length} pedidos sem cursor para a próxima página`,
+                );
+              break;
+            }
+            next = cursor;
+            if (raw.length > 100000)
+              throw new Error(
+                "Limite de segurança de 100.000 pedidos atingido",
+              );
+          } while (true);
+          let received = normalizeOrders({ result: raw });
+          if (!received.length) throw new Error("A API retornou zero itens");
+          data = received;
+          localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+          fillFilters();
+          page = 1;
+          render();
+          $("status").textContent =
+            `${received.length.toLocaleString("pt-BR")} itens carregados e salvos no cache local (${[...new Set(raw.map(((x) => x.Order || x).id || dashboardPagingId(x)))].length.toLocaleString("pt-BR")} pedidos únicos)`;
+        } catch (e) {
+          let partial = raw.length ? normalizeOrders({ result: raw }) : [];
+          if (partial.length) {
+            data = partial;
+            localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+            fillFilters();
+            render();
+            $("status").textContent =
+              `${partial.length.toLocaleString("pt-BR")} itens salvos no cache; falha após a página ${pageNo} de ${total.toLocaleString("pt-BR")} pedidos informados`;
+            $("msg").textContent = "Detalhe da API: " + e.message;
+          } else if (data.length) {
+            $("status").textContent =
+              `${data.length.toLocaleString("pt-BR")} itens no cache — API indisponível`;
+            $("msg").textContent =
+              "Não foi possível atualizar agora: " + e.message;
+          } else {
+            $("status").textContent = "Falha ao carregar a API: " + e.message;
+            $("msg").textContent =
+              "Verifique a conexão e tente recarregar a página.";
+          }
+        } finally {
+          loading = false;
+        }
+      }
+      // Segunda definição intencional: substitui a rotina legada acima sem alterar as demais telas.
+      async function loadApi(force = false) {
+        if (loading) return;
+        let cached = localStorage.getItem(CACHE_KEY);
+        if (cached && !force) {
+          try {
+            data = JSON.parse(cached);
+            fillFilters();
+            render();
+            $("status").textContent =
+              `${data.length.toLocaleString("pt-BR")} itens carregados do cache local — filtros locais ativos`;
+            return;
+          } catch {
+            localStorage.removeItem(CACHE_KEY);
+          }
+        }
+        loading = true;
+        let end = new Date().toISOString().slice(0, 10),
+          raw = [],
+          next = "",
+          total = 0,
+          pageNo = 0,
+          seenPages = new Set();
+        try {
+          do {
+            pageNo++;
+            let url = new URL(API_URL);
+            url.searchParams.set("start", "2020-01-01");
+            url.searchParams.set("end", end);
+            url.searchParams.set("limit", "100");
+            if (next) url.searchParams.set("next", next);
+            $("status").innerHTML =
+              '<span class="loading-dot"></span>Carregando pedidos: ' +
+              raw.length.toLocaleString("pt-BR") +
+              (total ? " de " + total.toLocaleString("pt-BR") : "") +
+              " — página " +
+              pageNo +
+              " — datas antigas serão salvas no cache";
+            let r = await fetch(url.toString()),
+              body = await r.text();
+            if (!r.ok)
+              throw new Error(`HTTP ${r.status}: ${body.slice(0, 240)}`);
+            let j = JSON.parse(body),
+              part = j.result || j.orders || j.data || [];
+            if (!Array.isArray(part) || !part.length) break;
+            let key = dashboardPageKey(part);
+            if (seenPages.has(key))
+              throw new Error(
+                `A API repetiu a página ${pageNo}; cursor enviado: ${next || "(primeira página)"}`,
+              );
+            seenPages.add(key);
+            raw.push(...part);
+            total = Number(j.total ?? total);
+            let cursor = dashboardCursor(j, part);
+            if (!cursor || cursor === next) {
+              if (part.length >= 100 && !cursor)
+                throw new Error(
+                  `A API retornou ${part.length} pedidos sem cursor para a próxima página`,
+                );
+              break;
+            }
+            next = cursor;
+            if (raw.length > 100000)
+              throw new Error(
+                "Limite de segurança de 100.000 pedidos atingido",
+              );
+          } while (true);
+          let received = normalizeOrders({ result: raw });
+          if (!received.length) throw new Error("A API retornou zero itens");
+          data = received;
+          localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+          fillFilters();
+          page = 1;
+          render();
+          let unique = new Set(
+            raw.map((x) => dashboardPagingId(x) || JSON.stringify(x)),
+          ).size;
+          $("status").textContent =
+            `${received.length.toLocaleString("pt-BR")} itens carregados e salvos no cache local (${unique.toLocaleString("pt-BR")} pedidos únicos)`;
+        } catch (e) {
+          let partial = raw.length ? normalizeOrders({ result: raw }) : [];
+          if (partial.length) {
+            data = partial;
+            localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+            fillFilters();
+            render();
+            $("status").textContent =
+              `${partial.length.toLocaleString("pt-BR")} itens salvos no cache; falha após a página ${pageNo} de ${total.toLocaleString("pt-BR")} pedidos informados`;
+            $("msg").textContent = "Detalhe da API: " + e.message;
+          } else if (data.length) {
+            $("status").textContent =
+              `${data.length.toLocaleString("pt-BR")} itens no cache — API indisponível`;
+            $("msg").textContent =
+              "Não foi possível atualizar agora: " + e.message;
+          } else {
+            $("status").textContent = "Falha ao carregar a API: " + e.message;
+            $("msg").textContent =
+              "Verifique a conexão e tente recarregar a página.";
+          }
+        } finally {
+          loading = false;
+        }
+      }
+      const SYNC_META_KEY = "painel-orders-sync-v3",
+        ORDERS_DB_NAME = "painel-orders-cache-db-v3",
+        ORDERS_STORE = "snapshots";
+      function dashboardToday() {
+        let d = new Date(),
+          p = (x) => String(x).padStart(2, "0");
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+      }
+      function dashboardOpenDb() {
+        return new Promise((resolve, reject) => {
+          if (!window.indexedDB)
+            return reject(new Error("IndexedDB indisponível"));
+          let req = window.indexedDB.open(ORDERS_DB_NAME, 1);
+          req.onupgradeneeded = () => {
+            if (!req.result.objectStoreNames.contains(ORDERS_STORE))
+              req.result.createObjectStore(ORDERS_STORE);
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () =>
+            reject(
+              req.error || new Error("Não foi possível abrir o cache local"),
+            );
+        });
+      }
+      async function dashboardReadCache() {
+        let fallback = [];
+        try {
+          fallback = JSON.parse(localStorage.getItem(CACHE_KEY) || "[]");
+        } catch {}
+        try {
+          let db = await dashboardOpenDb();
+          let salvo = await new Promise((resolve, reject) => {
+            let req = db
+              .transaction(ORDERS_STORE, "readonly")
+              .objectStore(ORDERS_STORE)
+              .get("all");
+            req.onsuccess = () =>
+              resolve(Array.isArray(req.result) ? req.result : []);
+            req.onerror = () => reject(req.error);
+          });
+          return salvo.length ? salvo : fallback;
+        } catch {
+          return fallback;
+        }
+      }
+      async function dashboardWriteCache(value) {
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify(value));
+        } catch {}
+        try {
+          let db = await dashboardOpenDb();
+          await new Promise((resolve, reject) => {
+            let req = db
+              .transaction(ORDERS_STORE, "readwrite")
+              .objectStore(ORDERS_STORE)
+              .put(value, "all");
+            req.onsuccess = resolve;
+            req.onerror = () => reject(req.error);
+          });
+        } catch {}
+      }
+      function dashboardMeta() {
+        try {
+          return JSON.parse(localStorage.getItem(SYNC_META_KEY) || "{}");
+        } catch {
+          return {};
+        }
+      }
+      function dashboardSaveMeta(value) {
+        localStorage.setItem(SYNC_META_KEY, JSON.stringify(value));
+      }
+      function dashboardMerge(existing, fresh) {
+        let ids = new Set(fresh.map((x) => x.order));
+        return existing.filter((x) => !ids.has(x.order)).concat(fresh);
+      }
+      async function loadApi(force = false) {
+        if (loading) return;
+        loading = true;
+        let pageNo = 0,
+          rawCount = 0,
+          total = 0,
+          next = "",
+          rawSeen = new Set(),
+          meta = dashboardMeta();
+        try {
+          let cached = await dashboardReadCache();
+          if (cached.length) {
+            data = cached;
+            fillFilters();
+            render();
+            $("status").innerHTML =
+              `<span class="loading-dot"></span>Cache histórico carregado: ${data.length.toLocaleString("pt-BR")} itens. Atualizando o mês atual...`;
+          }
+          let today = dashboardToday(),
+            currentStart = today.slice(0, 7) + "-01",
+            resume = Boolean(
+              meta.inProgress &&
+              meta.next !== undefined &&
+              meta.end &&
+              (meta.mode === "full" ||
+                (meta.mode === "current" &&
+                  meta.start === currentStart &&
+                  meta.end === today)),
+            ),
+            full = resume ? meta.mode === "full" : !meta.full || !data.length,
+            mode = full ? "full" : "current",
+            start = full ? "2000-01-01" : currentStart,
+            end = today;
+          if (resume && meta.start === start && meta.end === end)
+            next = String(meta.next || "");
+          else if (mode === "current")
+            data = data.filter((x) => {
+              let d = String(x.date || "").slice(0, 10);
+              return d < start || d > end;
+            });
+          if (!resume && mode === "current") await dashboardWriteCache(data);
+          do {
+            pageNo++;
+            let url = new URL(API_URL);
+            url.searchParams.set("start", start);
+            url.searchParams.set("end", end);
+            url.searchParams.set("limit", "100");
+            if (next) url.searchParams.set("next", next);
+            $("status").innerHTML =
+              '<span class="loading-dot"></span>Carregando ' +
+              (mode === "full" ? "todas as vendas" : "vendas do mês atual") +
+              ": " +
+              rawCount.toLocaleString("pt-BR") +
+              (total ? " de " + total.toLocaleString("pt-BR") : "") +
+              " pedidos — página " +
+              pageNo;
+            let response = await fetch(url.toString()),
+              body = await response.text();
+            if (!response.ok)
+              throw new Error(`HTTP ${response.status}: ${body.slice(0, 240)}`);
+            let payload = JSON.parse(body),
+              part = payload.result || payload.orders || payload.data || [];
+            if (!Array.isArray(part) || !part.length) break;
+            let key = dashboardPageKey(part);
+            if (rawSeen.has(key))
+              throw new Error(
+                `A API repetiu a página ${pageNo}; cursor enviado: ${next || "(primeira página)"}`,
+              );
+            rawSeen.add(key);
+            rawCount += part.length;
+            total = Number(payload.total ?? total);
+            let fresh = normalizeOrders({ result: part });
+            data = dashboardMerge(data, fresh);
+            await dashboardWriteCache(data);
+            let cursor = dashboardCursor(payload, part);
+            if (!cursor || cursor === next) {
+              if (part.length >= 100 && !cursor)
+                throw new Error(
+                  `A API retornou 100 pedidos sem cursor para a próxima página`,
+                );
+              break;
+            }
+            next = cursor;
+            dashboardSaveMeta({
+              full: mode === "full" ? false : Boolean(meta.full),
+              inProgress: true,
+              mode,
+              start,
+              end,
+              next,
+              total,
+              rawCount,
+            });
+          } while (true);
+          let completeFull = mode === "full" || Boolean(meta.full);
+          dashboardSaveMeta({
+            full: completeFull,
+            inProgress: false,
+            mode,
+            start,
+            end,
+            lastSync: today,
+            total,
+            rawCount,
+          });
+          fillFilters();
+          page = 1;
+          render();
+          $("status").textContent =
+            `${data.length.toLocaleString("pt-BR")} itens no cache — ${mode === "full" ? "carga completa concluída" : "mês atual atualizado"} (${rawCount.toLocaleString("pt-BR")} pedidos consultados)`;
+        } catch (e) {
+          await dashboardWriteCache(data).catch(() => {});
+          dashboardSaveMeta({
+            ...meta,
+            full: meta.full || false,
+            inProgress: true,
+            mode: meta.mode || "full",
+            start: meta.start || "2000-01-01",
+            end: meta.end || dashboardToday(),
+            next,
+            total,
+            rawCount,
+          });
+          fillFilters();
+          render();
+          $("status").textContent =
+            `${data.length.toLocaleString("pt-BR")} itens salvos no cache; falha após a página ${pageNo}`;
+          $("msg").textContent = "Detalhe da API: " + e.message;
+        } finally {
+          loading = false;
+        }
+      }
+      const PMC_API_URL =
+        "https://pluggto-proxy.guilhermepaulino-wapssolutions.workers.dev/orders-dashboard-pmc";
+      async function salvarPmcNoWorker(mapa) {
+        let r = await fetch(PMC_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pmc: mapa }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      }
+      async function carregarPmcDoWorker() {
+        let local = pmc;
+        try {
+          let r = await fetch(PMC_API_URL, { cache: "no-store" });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          let remoto = await r.json();
+          if (Object.keys(remoto).length) {
+            pmc = remoto;
+            localStorage.setItem(PMC_KEY, JSON.stringify(pmc));
+            render();
+            $("msg").textContent =
+              `${Object.keys(pmc).length.toLocaleString("pt-BR")} SKUs PMC carregados do Worker.`;
+          } else if (Object.keys(local).length) {
+            await salvarPmcNoWorker(local);
+            $("msg").textContent =
+              `${Object.keys(local).length.toLocaleString("pt-BR")} SKUs PMC enviados ao Worker.`;
+          }
+        } catch (e) {
+          $("msg").textContent =
+            "Worker de PMC indisponível; usando o cache local. " + e.message;
+        }
+      }
+      async function loadPMC() {
+        let f = $("pf").files[0];
+        if (!f) return;
+        $("msg").textContent = "Importando PMC e salvando no Worker...";
+        try {
+          let rows = await readFile(f),
+            mapa = {};
+          rows.forEach((r) => {
+            let sk = Object.keys(r).find((k) => /sku|c[oó]digo/i.test(k)),
+              pk = Object.keys(r).find((k) => k.trim().toUpperCase() === "PMC");
+            if (sk) mapa[cleanSku(r[sk])] = num(r[pk]);
+          });
+          let resposta = await salvarPmcNoWorker(mapa);
+          pmc = mapa;
+          localStorage.setItem(PMC_KEY, JSON.stringify(pmc));
+          $("msg").textContent =
+            `${Number(resposta.totalSkus || Object.keys(pmc).length).toLocaleString("pt-BR")} SKUs PMC salvos no Worker.`;
+          render();
+        } catch (e) {
+          $("msg").textContent =
+            "Não foi possível salvar os PMCs no Worker: " + e.message;
+        }
+      }
+      function exportPMC() {
+        let rows = [
+            "SKU,PMC",
+            ...Object.keys(pmc)
+              .sort()
+              .map((k) => `${k},${pmc[k] ?? ""}`),
+          ],
+          a = document.createElement("a");
+        a.href = URL.createObjectURL(
+          new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" }),
+        );
+        a.download = "sku-pmc.csv";
+        a.click();
+      }
+      (function () {
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = function (input, init) {
+          try {
+            let u = new URL(typeof input === "string" ? input : input.url);
+            if (u.pathname === "/orders-dashboard") {
+              u.searchParams.set("server_cache", "1");
+              let d = new Date(),
+                p = (x) => String(x).padStart(2, "0"),
+                today = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+                currentStart = today.slice(0, 7) + "-01";
+              if (
+                u.searchParams.get("start") === currentStart &&
+                u.searchParams.get("end") === today
+              )
+                u.searchParams.set("refresh", "1");
+              return originalFetch(u.toString(), init);
+            }
+          } catch {}
+          return originalFetch(input, init);
+        };
+      })();
+      function apiDate(v) {
+        let s = String(v || "");
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+          let z = /Z$/.test(s) || /[+-]\d{2}:?\d{2}$/.test(s);
+          return s.slice(0, 19) + (z ? "Z" : "");
+        }
+        let m = s.match(
+          /(\d{2})[-/](\d{2})[-/](\d{4})(?:\s+(\d{2}:\d{2}:\d{2}))?/,
+        );
+        return m ? `${m[3]}-${m[2]}-${m[1]}T${m[4] || "00:00:00"}` : "";
+      }
+      function normalizeOrders(json) {
+        let rows = Array.isArray(json)
+            ? json
+            : json.result || json.orders || json.data || [],
+          seen = new Set();
+        return rows
+          .map((x, n) => x.Order || x)
+          .filter((q) => {
+            let status = String(q.status || "")
+              .trim()
+              .toLowerCase();
+            return (
+              status !== "canceled" &&
+              status !== "cancelled" &&
+              status !== "pending"
+            );
+          })
+          .filter((q, n) => {
+            let id = orderOf(q, n);
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          })
+          .flatMap((q, n) => {
+            let s = Array.isArray(q.shipments) ? q.shipments[0] : q.shipments,
+              items = q.items || s?.items || [],
+              date = apiDate(
+                q.created || s?.created || q["Criado em"] || q.created_at,
+              );
+            return items
+              .map((i) => {
+                let z = cleanSku(i.variation?.sku || i.sku || i.SKU),
+                  qty = num(itemValue(i, "quantity")),
+                  price = num(itemValue(i, "price") ?? i.total);
+                return z
+                  ? {
+                      order: orderOf(q, n),
+                      date,
+                      platform: platformOf(q),
+                      sku: z,
+                      qty,
+                      sale: price * qty,
+                    }
+                  : null;
+              })
+              .filter(Boolean);
+          });
+      }
+      function formatarDataBrasil(valor) {
+        let d = new Date(valor);
+        if (!Number.isNaN(d.getTime()))
+          return new Intl.DateTimeFormat("pt-BR", {
+            timeZone: "America/Sao_Paulo",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          }).format(d);
+        let m = String(valor || "").match(
+          /^(\d{4})-(\d{2})-(\d{2})(?:T|\s)(\d{2}:\d{2}:\d{2})/,
+        );
+        return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}` : String(valor || "");
+      }
+      const renderOriginal = render;
+      render = function () {
+        renderOriginal();
+        document.querySelectorAll(".order>div").forEach((el) => {
+          el.innerHTML = el.innerHTML.replace(
+            /\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+Z)?/g,
+            (x) => formatarDataBrasil(x),
+          );
+        });
+      };
 
-const CUSTOS_API_URL='https://pluggto-proxy.guilhermepaulino-wapssolutions.workers.dev/orders-dashboard-costs';
-async function salvarCustosNoWorker(mapa){let r=await fetch(CUSTOS_API_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({costs:mapa})});if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}
-async function carregarCustosDoWorker(){let local=costs;try{let r=await fetch(CUSTOS_API_URL,{cache:'no-store'});if(!r.ok)throw new Error(`HTTP ${r.status}`);let remoto=await r.json();if(remoto&&Object.keys(remoto).length){costs=remoto;localStorage.setItem('costs',JSON.stringify(costs))}else if(Object.keys(local).length){await salvarCustosNoWorker(local)}drawCosts();render()}catch(e){drawCosts();$('msg').textContent='Custos compartilhados indisponíveis; usando o cache local. '+e.message}}
-async function saveCost(){let p=$('cp').value,n=$('cn').value.trim()||'Custo',k=editingCost||p+'|'+n;costs[k]={platform:p,name:n,rate:num($('cr').value),fix:num($('cf').value)};localStorage.setItem('costs',JSON.stringify(costs));editingCost=null;$('cancelCost').classList.add('hidden');$('cn').value='';$('cr').value='';$('cf').value='';drawCosts();render();try{await salvarCustosNoWorker(costs);$('msg').textContent='Custo salvo e compartilhado entre os aparelhos.'}catch(e){$('msg').textContent='Custo salvo neste aparelho; Worker indisponível. '+e.message}}
-async function deleteCost(k){if(!confirm('Excluir este custo?'))return;delete costs[k];localStorage.setItem('costs',JSON.stringify(costs));drawCosts();render();try{await salvarCustosNoWorker(costs);$('msg').textContent='Custo excluído e sincronizado.'}catch(e){$('msg').textContent='Custo excluído neste aparelho; Worker indisponível. '+e.message}}
-function render(){let orders=groupOrders(filtered()),S=orders.reduce((s,x)=>s+x.sale,0),M=orders.reduce((s,x)=>s+x.pmc,0),F=orders.reduce((s,x)=>s+x.fee,0),L=S-M-F;$('sale').textContent=money(S);$('cost').textContent=money(M);$('fee').textContent=money(F);$('profit').textContent=money(L);let by={};orders.forEach(o=>(by[o.platform]??=[]).push(o));$('summary').innerHTML=Object.entries(by).map(([p,v])=>{let sale=v.reduce((a,x)=>a+x.sale,0),pmcTotal=v.reduce((a,x)=>a+x.pmc,0),fee=v.reduce((a,x)=>a+x.fee,0),profit=v.reduce((a,x)=>a+x.profit,0);return`<tr><td>${esc(p)}</td><td>${v.length}</td><td>${money(sale)}</td><td>${money(pmcTotal)}</td><td>${money(fee)}</td><td>${money(profit)}</td><td>${sale?(profit/sale*100).toFixed(1):'0.0'}%</td></tr>`}).join('')||'<tr><td colspan="7">Nenhum pedido encontrado.</td></tr>';$('orderCount').textContent=`${orders.length.toLocaleString('pt-BR')} pedido(s) encontrado(s)`;let totalPages=Math.max(1,Math.ceil(orders.length/20));if(page>totalPages)page=totalPages;let visible=orders.slice((page-1)*20,page*20);$('orders').innerHTML=visible.map(o=>`<article class="order"><div class="order-top"><div><h4 class="order-id">Pedido ${esc(o.order)}</h4><div class="metric-label">${esc(o.platform)}</div></div><div class="order-meta">${esc(formatarDataBrasil(o.date))}</div></div><table class="order-lines"><thead><tr><th>SKU</th><th>Qtd</th><th>Venda</th><th>PMC</th><th>Custo</th><th>Líquido</th></tr></thead><tbody>${o.lines.map(x=>`<tr><td>${esc(x.sku)}</td><td>${x.qty}</td><td>${money(x.sale)}</td><td>${money(x.productPmc)}</td><td>${money(x.productFee)}</td><td><b>${money(x.profit)}</b></td></tr>`).join('')}</tbody></table><div class="order-total"><span>Venda<strong>${money(o.sale)}</strong></span><span>PMC<strong>${money(o.pmc)}</strong></span><span>Custos<strong>${money(o.fee)}</strong></span><span>Lucro líquido<strong>${money(o.profit)}</strong></span><span>Margem<strong>${o.sale?(o.profit/o.sale*100).toFixed(1):'0.0'}%</strong></span></div></article>`).join('')||'<p>Nenhum pedido encontrado.</p>';$('pager').innerHTML=totalPages>1?`<button onclick="changePage(-1)" ${page===1?'disabled':''}>Anterior</button><span>Página ${page} de ${totalPages}</span><button onclick="changePage(1)" ${page===totalPages?'disabled':''}>Próxima</button>`:'';renderMissing()}
-carregarPmcDoWorker();carregarCustosDoWorker();
-</script>
-</body>
+      // Sincronização incremental: a carga completa ocorre uma vez; depois consultamos
+      // somente pedidos criados desde o último ponto salvo no cache local.
+      async function loadApi(force = false, requestedMode = "auto") {
+        if (loading) return;
+        loading = true;
+        let pageNo = Number(dashboardMeta().pageNo || 0),
+          rawCount = 0,
+          total = 0,
+          next = "",
+          rawSeen = new Set(),
+          meta = dashboardMeta(),
+          mode = "full",
+          start = "2000-01-01",
+          end = dashboardToday(),
+          since = "";
+        try {
+          let cached = await dashboardReadCache();
+          if (cached.length) {
+            data = cached;
+            fillFilters();
+            render();
+          }
+          let today = dashboardToday(),
+            currentStart = today.slice(0, 7) + "-01",
+            lastSync = Date.parse(meta.lastSyncAt || meta.lastSync || "");
+          if (
+            !force &&
+            meta.full &&
+            !meta.inProgress &&
+            data.length &&
+            Number.isFinite(lastSync) &&
+            Date.now() - lastSync < 5 * 60 * 1000
+          ) {
+            $("status").textContent =
+              `${data.length.toLocaleString("pt-BR")} itens no cache — sincronização recente mantida; nenhuma consulta necessária`;
+            loading = false;
+            return;
+          }
+          let resumable = Boolean(
+            requestedMode === "auto" &&
+            meta.inProgress &&
+            meta.next !== undefined &&
+            meta.start &&
+            meta.end &&
+            (meta.mode === "full" || meta.mode === "incremental"),
+          );
+          if (!resumable) pageNo = 0;
+          if (requestedMode === "full") {
+            mode = "full";
+            start = "2000-01-01";
+            end = today;
+            since = "";
+            next = "";
+          } else if (requestedMode === "day") {
+            mode = "day";
+            start = today;
+            end = today;
+            let checkpoint = meta.lastDaySyncAt || "";
+            if (checkpoint) {
+              let t = Date.parse(checkpoint);
+              since = Number.isFinite(t)
+                ? new Date(Math.max(0, t - 1000)).toISOString()
+                : checkpoint;
+            }
+          } else if (resumable) {
+            mode = meta.mode;
+            start = meta.start;
+            end = meta.end;
+            since = meta.since || "";
+            next = String(meta.next || "");
+          } else if (meta.full && data.length) {
+            mode = "incremental";
+            start = currentStart;
+            end = today;
+            let checkpoint = meta.lastSyncAt || meta.lastSync || "";
+            if (checkpoint) {
+              let t = Date.parse(checkpoint);
+              since = Number.isFinite(t)
+                ? new Date(Math.max(0, t - 1000)).toISOString()
+                : `${checkpoint}T00:00:00.000Z`;
+            }
+          }
+          let retomando = Boolean(resumable && mode === "full");
+          $("status").innerHTML =
+            `<span class="loading-dot"></span>${retomando ? "Retomando carga histórica" : mode === "day" ? "Atualizando pedidos de hoje" : "Carregando todas as vendas"}...`;
+          do {
+            pageNo++;
+            let url = new URL(API_URL);
+            url.searchParams.set("start", start);
+            url.searchParams.set("end", end);
+            url.searchParams.set("limit", "100");
+            if (since) url.searchParams.set("since", since);
+            if (next) url.searchParams.set("next", next);
+            $("status").innerHTML =
+              `<span class="loading-dot"></span>${retomando ? "Retomando carga histórica" : mode === "full" ? "Carregando todas as vendas" : mode === "day" ? "Atualizando pedidos de hoje" : "Verificando novos pedidos"}: ${rawCount.toLocaleString("pt-BR")}${total ? " de " + total.toLocaleString("pt-BR") : ""} — página ${pageNo}`;
+            let response = await fetch(url.toString()),
+              body = await response.text();
+            if (!response.ok)
+              throw new Error(`HTTP ${response.status}: ${body.slice(0, 240)}`);
+            let payload = JSON.parse(body),
+              part = payload.result || payload.orders || payload.data || [];
+            if (!Array.isArray(part) || !part.length) break;
+            let key = dashboardPageKey(part);
+            if (rawSeen.has(key))
+              throw new Error(
+                `A API repetiu a página ${pageNo}; cursor enviado: ${next || "(primeira página)"}`,
+              );
+            rawSeen.add(key);
+            rawCount += part.length;
+            total = Number(payload.total ?? total);
+            let fresh = normalizeOrders({ result: part });
+            data = dashboardMerge(data, fresh);
+            await dashboardWriteCache(data);
+            let cursor = dashboardCursor(payload, part);
+            if (!cursor || cursor === next) {
+              if (part.length >= 100 && !cursor)
+                throw new Error(
+                  "A API retornou 100 pedidos sem cursor para a próxima página",
+                );
+              break;
+            }
+            next = cursor;
+            dashboardSaveMeta({
+              full: mode === "full" ? false : Boolean(meta.full),
+              inProgress: true,
+              mode,
+              start,
+              end,
+              since,
+              next,
+              total,
+              rawCount,
+              pageNo,
+            });
+            if (rawCount > 200000)
+              throw new Error(
+                "Limite de segurança de 200.000 pedidos atingido",
+              );
+          } while (true);
+          let completeFull = mode === "full" || Boolean(meta.full);
+          dashboardSaveMeta({
+            full: completeFull,
+            inProgress: false,
+            mode,
+            start,
+            end,
+            since,
+            lastSyncAt: new Date().toISOString(),
+            lastDaySyncAt:
+              mode === "day"
+                ? new Date().toISOString()
+                : meta.lastDaySyncAt || "",
+            total,
+            rawCount,
+            pageNo,
+          });
+          fillFilters();
+          page = 1;
+          render();
+          $("status").textContent =
+            mode === "full"
+              ? `${data.length.toLocaleString("pt-BR")} itens salvos no cache — carga completa concluída (${rawCount.toLocaleString("pt-BR")} pedidos consultados)`
+              : mode === "day"
+                ? `${data.length.toLocaleString("pt-BR")} itens no cache — pedidos de hoje atualizados (${rawCount.toLocaleString("pt-BR")} consultados)`
+                : rawCount
+                  ? `${data.length.toLocaleString("pt-BR")} itens no cache — ${rawCount.toLocaleString("pt-BR")} pedidos novos verificados`
+                  : "Nenhum pedido novo; cache histórico mantido";
+        } catch (e) {
+          await dashboardWriteCache(data).catch(() => {});
+          dashboardSaveMeta({
+            ...meta,
+            full: meta.full || false,
+            inProgress: true,
+            mode,
+            start,
+            end,
+            since,
+            next,
+            total,
+            rawCount,
+            pageNo,
+          });
+          fillFilters();
+          render();
+          $("status").textContent =
+            `${data.length.toLocaleString("pt-BR")} itens mantidos no cache; falha após a página ${pageNo || 0}`;
+          $("msg").textContent = "Detalhe da API: " + e.message;
+        } finally {
+          loading = false;
+        }
+      }
+
+      const CUSTOS_API_URL =
+        "https://pluggto-proxy.guilhermepaulino-wapssolutions.workers.dev/orders-dashboard-costs";
+      async function salvarCustosNoWorker(mapa) {
+        let r = await fetch(CUSTOS_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ costs: mapa }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      }
+      async function carregarCustosDoWorker() {
+        let local = costs;
+        try {
+          let r = await fetch(CUSTOS_API_URL, { cache: "no-store" });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          let remoto = await r.json();
+          if (remoto && Object.keys(remoto).length) {
+            costs = remoto;
+            localStorage.setItem("costs", JSON.stringify(costs));
+          } else if (Object.keys(local).length) {
+            await salvarCustosNoWorker(local);
+          }
+          drawCosts();
+          render();
+        } catch (e) {
+          drawCosts();
+          $("msg").textContent =
+            "Custos compartilhados indisponíveis; usando o cache local. " +
+            e.message;
+        }
+      }
+      async function saveCost() {
+        let p = $("cp").value,
+          n = $("cn").value.trim() || "Custo",
+          k = editingCost || p + "|" + n;
+        costs[k] = {
+          platform: p,
+          name: n,
+          rate: num($("cr").value),
+          fix: num($("cf").value),
+        };
+        localStorage.setItem("costs", JSON.stringify(costs));
+        editingCost = null;
+        $("cancelCost").classList.add("hidden");
+        $("cn").value = "";
+        $("cr").value = "";
+        $("cf").value = "";
+        drawCosts();
+        render();
+        try {
+          await salvarCustosNoWorker(costs);
+          $("msg").textContent =
+            "Custo salvo e compartilhado entre os aparelhos.";
+        } catch (e) {
+          $("msg").textContent =
+            "Custo salvo neste aparelho; Worker indisponível. " + e.message;
+        }
+      }
+      async function deleteCost(k) {
+        if (!confirm("Excluir este custo?")) return;
+        delete costs[k];
+        localStorage.setItem("costs", JSON.stringify(costs));
+        drawCosts();
+        render();
+        try {
+          await salvarCustosNoWorker(costs);
+          $("msg").textContent = "Custo excluído e sincronizado.";
+        } catch (e) {
+          $("msg").textContent =
+            "Custo excluído neste aparelho; Worker indisponível. " + e.message;
+        }
+      }
+      function render() {
+        let orders = groupOrders(filtered()),
+          S = orders.reduce((s, x) => s + x.sale, 0),
+          M = orders.reduce((s, x) => s + x.pmc, 0),
+          F = orders.reduce((s, x) => s + x.fee, 0),
+          L = S - M - F;
+        $("sale").textContent = money(S);
+        $("cost").textContent = money(M);
+        $("fee").textContent = money(F);
+        $("profit").textContent = money(L);
+        let by = {};
+        orders.forEach((o) => (by[o.platform] ??= []).push(o));
+        $("summary").innerHTML =
+          Object.entries(by)
+            .map(([p, v]) => {
+              let sale = v.reduce((a, x) => a + x.sale, 0),
+                pmcTotal = v.reduce((a, x) => a + x.pmc, 0),
+                fee = v.reduce((a, x) => a + x.fee, 0),
+                profit = v.reduce((a, x) => a + x.profit, 0);
+              return `<tr><td>${esc(p)}</td><td>${v.length}</td><td>${money(sale)}</td><td>${money(pmcTotal)}</td><td>${money(fee)}</td><td>${money(profit)}</td><td>${sale ? ((profit / sale) * 100).toFixed(1) : "0.0"}%</td></tr>`;
+            })
+            .join("") ||
+          '<tr><td colspan="7">Nenhum pedido encontrado.</td></tr>';
+        $("orderCount").textContent =
+          `${orders.length.toLocaleString("pt-BR")} pedido(s) encontrado(s)`;
+        let totalPages = Math.max(1, Math.ceil(orders.length / 20));
+        if (page > totalPages) page = totalPages;
+        let visible = orders.slice((page - 1) * 20, page * 20);
+        $("orders").innerHTML =
+          visible
+            .map(
+              (o) =>
+                `<article class="order"><div class="order-top"><div><h4 class="order-id">Pedido ${esc(o.order)}</h4><div class="metric-label">${esc(o.platform)}</div></div><div class="order-meta">${esc(formatarDataBrasil(o.date))}</div></div><table class="order-lines"><thead><tr><th>SKU</th><th>Qtd</th><th>Venda</th><th>PMC</th><th>Custo</th><th>Líquido</th></tr></thead><tbody>${o.lines.map((x) => `<tr><td>${esc(x.sku)}</td><td>${x.qty}</td><td>${money(x.sale)}</td><td>${money(x.productPmc)}</td><td>${money(x.productFee)}</td><td><b>${money(x.profit)}</b></td></tr>`).join("")}</tbody></table><div class="order-total"><span>Venda<strong>${money(o.sale)}</strong></span><span>PMC<strong>${money(o.pmc)}</strong></span><span>Custos<strong>${money(o.fee)}</strong></span><span>Lucro líquido<strong>${money(o.profit)}</strong></span><span>Margem<strong>${o.sale ? ((o.profit / o.sale) * 100).toFixed(1) : "0.0"}%</strong></span></div></article>`,
+            )
+            .join("") || "<p>Nenhum pedido encontrado.</p>";
+        $("pager").innerHTML =
+          totalPages > 1
+            ? `<button onclick="changePage(-1)" ${page === 1 ? "disabled" : ""}>Anterior</button><span>Página ${page} de ${totalPages}</span><button onclick="changePage(1)" ${page === totalPages ? "disabled" : ""}>Próxima</button>`
+            : "";
+        renderMissing();
+      }
+      carregarPmcDoWorker();
+      carregarCustosDoWorker();
+    </script>
+  </body>
 </html>
