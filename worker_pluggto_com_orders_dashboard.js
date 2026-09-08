@@ -312,8 +312,12 @@ function normalizarCustosDashboard(valor) {
     const platform = String(item.platform || "").trim()
     if (!platform) continue
     const name = String(item.name || "Custo").trim() || "Custo"
-    const rate = Number(item.rate || 0)
-    const fix = Number(item.fix || 0)
+    const decimal = value => {
+      const text = String(value ?? 0).trim()
+      return Number(text.includes(",") ? text.replace(/\./g, "").replace(",", ".") : text)
+    }
+    const rate = decimal(item.rate)
+    const fix = decimal(item.fix)
     custos[String(chave)] = { platform, name, rate: Number.isFinite(rate) ? rate : 0, fix: Number.isFinite(fix) ? fix : 0 }
   }
   return custos
